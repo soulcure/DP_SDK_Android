@@ -10,6 +10,7 @@ import android.text.TextUtils
 import android.util.Log
 import android.view.View
 import android.widget.Toast
+import com.skyworth.dpclientsdk.DeviceUtil
 import com.swaiotos.skymirror.sdk.manager.DeviceControllerManager
 import com.swaiotos.skymirror.sdk.util.DLNACommonUtil
 import com.swaiotos.skymirror.sdk.util.NetUtils
@@ -61,10 +62,10 @@ class MainActivity : Activity()/* : SSChannelClient.SSChannelClientActivity()*/ 
         params.width = 1
         window.setAttributes(params)*/
 
-        //etInputCaptureIp.setText(NetUtils.getIP(this))
+        //etInputCaptureIp.setText(DeviceUtil.getLocalIPAddress(this))
         //etInputCaptureIp.setText("172.20.130.169")
-        etInputCaptureIp.setText("192.168.50.202")
-        //etInputCaptureIp.setText("192.168.137.115")
+        etInputCaptureIp.setText("192.168.137.197")
+        //etInputCaptureIp.setText("192.168.0.3")
 
         versionName.text = BuildConfig.VERSION_NAME
     }

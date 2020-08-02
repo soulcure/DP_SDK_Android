@@ -18,37 +18,16 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
-        <!--流发起端-->
-        <activity android:name="com.skyworth.dpclient.StreamSourceActivity">
+        <activity android:name="com.skyworth.dpclient.MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- 流接受端 -->
-        <!--<activity android:name=".StreamSinkActivity">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>-->
+        <activity android:name=".UdpServerActivity" />
+        <activity android:name=".UdpClientActivity" />
 
-        <!-- 命令发起端 -->
-        <!--<activity android:name=".CommandRequestActivity">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>-->
-
-        <!-- 命令接收端 -->
-        <!--<activity android:name=".CommandResponseActivity">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>-->
     </application>
 
     <uses-permission android:name="android.permission.INTERNET" />

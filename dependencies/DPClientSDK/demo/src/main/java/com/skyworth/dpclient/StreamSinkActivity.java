@@ -29,6 +29,11 @@ public class StreamSinkActivity extends AppCompatActivity implements View.OnClic
         }
 
         @Override
+        public void onData(String data) {
+
+        }
+
+        @Override
         public void onAudioFrame(MediaCodec.BufferInfo bufferInfo, ByteBuffer data) {
 
         }

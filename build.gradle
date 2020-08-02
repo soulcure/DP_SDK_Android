@@ -5,6 +5,10 @@ apply from: 'property/property.gradle'
 buildscript {
     ext.kotlin_version = '1.3.61'
     repositories {
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/jcenter' }
+
         google()
         jcenter()
         
@@ -21,6 +25,10 @@ buildscript {
 
 allprojects {
     repositories {
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/jcenter' }
+
         google()
         jcenter()
         

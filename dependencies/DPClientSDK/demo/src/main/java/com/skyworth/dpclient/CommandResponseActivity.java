@@ -18,7 +18,7 @@ public class CommandResponseActivity extends AppCompatActivity implements View.O
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        setContentView(R.layout.activity_main5);
 
         //命令接收回调
         callback1 = new RequestCallback() {
@@ -37,6 +37,16 @@ public class CommandResponseActivity extends AppCompatActivity implements View.O
             @Override
             public void onConnectState(int socketId, ConnectState state) {
                 Log.d("server", "id: " + socketId + " 连接状态：" + state);
+            }
+
+            @Override
+            public void ping(int socketId, String cmd) {
+
+            }
+
+            @Override
+            public void pong(int socketId, String cmd) {
+
             }
         };
 

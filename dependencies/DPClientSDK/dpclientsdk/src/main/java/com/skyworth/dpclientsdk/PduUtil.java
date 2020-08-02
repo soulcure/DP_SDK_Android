@@ -10,7 +10,18 @@ public abstract class PduUtil {
 
     private static final String TAG = PduUtil.class.getSimpleName();
 
+    public static final byte PDU_BYTES = 0x00;
+    public static final byte PDU_STRING = 0x01;
+    public static final byte PDU_VIDEO = 0x02;
+    public static final byte PDU_AUDIO = 0x03;
+    public static final byte PDU_PING = 0x0E;
+    public static final byte PDU_PONG = 0x0F;
+
+
+    public abstract void OnRec(PduBase pduBase);
+
     public abstract void OnRec(PduBase pduBase, SocketChannel channel);
+
 
     public int parsePdu(ByteBuffer buffer, SocketChannel channel) {
 
@@ -60,6 +71,16 @@ public abstract class PduUtil {
             return -2;
         }
     }
+
+
+    public void parsePdu(byte[] packByte) {
+        //has a full pack.
+        int totalLength = packByte.length;
+        PduBase pduBase = buildPdu(packByte);
+        OnRec(pduBase);
+        Log.v(TAG, "pdu read is totalLength:" + totalLength);
+    }
+
 
     private PduBase buildPdu(byte[] bytes) {
         PduBase units = new PduBase();

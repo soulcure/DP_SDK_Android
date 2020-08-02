@@ -12,6 +12,7 @@ import android.view.Surface;
 
 import androidx.annotation.RequiresApi;
 
+import com.skyworth.dpclientsdk.UdpServer;
 import com.skyworth.dpclientsdk.WebSocketServer;
 import com.swaiotos.skymirror.sdk.Command.CheckVer;
 import com.swaiotos.skymirror.sdk.Command.ClientIpCodec;
@@ -69,6 +70,7 @@ public class PlayerDecoder {
 
     //video socket 传输
     private StreamChannelSink mSocketServer;
+    private UdpServer udpServer;
     private LinkedBlockingQueue<FrameInfo> videoList = null;
 
     private boolean videoDecoderConfigured = false;
@@ -97,7 +99,9 @@ public class PlayerDecoder {
         //控制端建立 webSocketServer 端，发送控制事件
         initWebSocketServer();
         //视频流接收方（接收方：socket server 端接收解码播放 ，socket client 端为录制编码发送方）
-        initSocketServer();
+        initTcpServer();
+
+        initUdpServer();
         Log.d("playerDecoder", "onStartCommand: PlayerDecoder init success");
     }
 
@@ -499,7 +503,7 @@ public class PlayerDecoder {
      * 用于控制，和传输触控事件
      */
     private void initWebSocketServer() {
-        mWebSocketServer = new WebSocketServer(PortKey.PORT_HTTP_DATA, new RequestCallback() {
+        mWebSocketServer = new WebSocketServer(PortKey.PORT_WEB_SOCKET, new RequestCallback() {
             @Override
             public void onRead(int socketId, String s) {
                 serverOnRead(socketId, s);
@@ -545,11 +549,16 @@ public class PlayerDecoder {
      * 初始化视频数据 socketServer 端
      * socketServer 建立在同屏控制的控制方
      */
-    private void initSocketServer() {
+    private void initTcpServer() {
         //just client send pdu to server
-        mSocketServer = new StreamChannelSink(PortKey.PORT_SOCKET_VIDEO, new StreamSinkCallback() {
+        mSocketServer = new StreamChannelSink(PortKey.PORT_TCP, new StreamSinkCallback() {
             @Override
             public void onData(byte[] data) {
+
+            }
+
+            @Override
+            public void onData(String data) {
 
             }
 
@@ -578,6 +587,49 @@ public class PlayerDecoder {
         });
     }
 
+
+    /**
+     * 初始化视频数据 socketServer 端
+     * socketServer 建立在同屏控制的控制方
+     */
+    private void initUdpServer() {
+        //just client send pdu to server
+        udpServer = new UdpServer(PortKey.PORT_UDP, new StreamSinkCallback() {
+            @Override
+            public void onData(byte[] data) {
+
+            }
+
+            @Override
+            public void onData(String data) {
+
+            }
+
+            @Override
+            public void onAudioFrame(MediaCodec.BufferInfo bufferInfo, ByteBuffer byteBuffer) {
+
+            }
+
+            @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+            @Override
+            public void onVideoFrame(MediaCodec.BufferInfo bufferInfo, ByteBuffer byteBuffer) {
+                Log.d(TAG, "onData: onVideoFrame bufferInfo:" + bufferInfo.size);
+                Log.d(TAG, "onData: onVideoFrame byteBuffer size:" + byteBuffer.remaining());
+                setVideoData(bufferInfo, byteBuffer);
+            }
+
+            @Override
+            public void onConnectState(ConnectState connectState) {
+                Log.d(TAG, "create  videoSocket onConnectState --- " + connectState);
+                if (connectState != ConnectState.CONNECT) {
+                    mirServerStop(6);
+                    if (playerListener != null)
+                        playerListener.onError(CODE_SOCKET_ERROR, "get socket error");
+                }
+            }
+        });
+        udpServer.open();
+    }
 
     private void prepare(String ip) {
         if (DLNACommonUtil.checkPermission(mContext) || mSurface == null) {

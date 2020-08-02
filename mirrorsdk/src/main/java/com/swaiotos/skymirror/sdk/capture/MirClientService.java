@@ -49,7 +49,9 @@ import android.view.WindowManager;
 import androidx.annotation.RequiresApi;
 
 import com.google.gson.Gson;
+import com.skyworth.dpclientsdk.PduUtil;
 import com.skyworth.dpclientsdk.StreamSourceCallback;
+import com.skyworth.dpclientsdk.UdpClient;
 import com.swaiotos.skymirror.sdk.Command.Command;
 import com.swaiotos.skymirror.sdk.Command.DecoderStatus;
 import com.swaiotos.skymirror.sdk.Command.Dog;
@@ -130,6 +132,9 @@ public abstract class MirClientService extends Service {
     private LinkedBlockingQueue<MotionEvent> touchEventQueue;
 
     private StreamChannelSource mVideoDataClient;
+    private UdpClient udpClient;
+
+
     private MediaProjection mediaProjection;
 
 
@@ -272,11 +277,13 @@ public abstract class MirClientService extends Service {
             Log.d(TAG, "onStartCommand: client(PHONE) ip ----- " + ip);
             Log.d(TAG, "onStartCommand: server(TV) ip ----- " + NetUtils.getIP(this));
 
-            mWebSocketClient = new WebSocketClient(ip, PortKey.PORT_HTTP_DATA, mResponseCallback);
+            mWebSocketClient = new WebSocketClient(ip, PortKey.PORT_WEB_SOCKET, mResponseCallback);
             mWebSocketClient.open();
 
-            mVideoDataClient = new StreamChannelSource(ip, PortKey.PORT_SOCKET_VIDEO,
-                    mStreamSourceCallback);
+            udpClient = new UdpClient(ip, PortKey.PORT_UDP, mStreamSourceCallback);
+            udpClient.open();
+
+            mVideoDataClient = new StreamChannelSource(ip, PortKey.PORT_TCP, mStreamSourceCallback);
 
         } else if (action != null && action.equals("STOP")) {
             Log.d(TAG, "onStartCommand: stop flag");
@@ -437,14 +444,23 @@ public abstract class MirClientService extends Service {
                 } else {
                     encodeData = encoder.getOutputBuffer(index);
                 }
+
+
                 if (encodeData != null
+                        && udpClient != null
+                        && udpClient.isOpen()
+                        && mBufferInfo.size != 0) {
+                    udpClient.sendData(PduUtil.PDU_VIDEO, mBufferInfo, encodeData);
+                    Log.e("colin", "colin start time05 --- tv start Encoder finish will send by udp socket");
+                } else if (encodeData != null
                         && mVideoDataClient != null
                         && mVideoDataClient.isOpen()
                         && mBufferInfo.size != 0) {
                     mVideoDataClient.sendData(StreamChannelSource.PduType.VideoFrame, mBufferInfo, encodeData);
-
-                    Log.e("colin", "colin start time05 --- tv start Encoder finish will send by socket");
+                    Log.e("colin", "colin start time05 --- tv start Encoder finish will send by tcp socket");
                 }
+
+
                 encoder.releaseOutputBuffer(index, false);
             }
         } catch (Exception e) {

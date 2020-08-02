@@ -74,6 +74,11 @@ public class StreamChannelSink extends PduUtil implements Runnable {
 
 
     @Override
+    public void OnRec(PduBase pduBase) {
+
+    }
+
+    @Override
     public void OnRec(final PduBase pduBase, SocketChannel channel) {
         if (mCallback != null) {
             processHandler.post(new Runnable() {

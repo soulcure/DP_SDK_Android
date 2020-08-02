@@ -45,6 +45,16 @@ public class CommandRequestActivity extends AppCompatActivity implements View.On
             public void onConnectState(ConnectState state) {
                 Log.d("client", "连接状态：" + state);
             }
+
+            @Override
+            public void ping(String cmd) {
+
+            }
+
+            @Override
+            public void pong(String cmd) {
+
+            }
         };
     }
 
@@ -60,7 +70,7 @@ public class CommandRequestActivity extends AppCompatActivity implements View.On
                 test2.open();
                 break;
             case R.id.button_client_send:
-                test2.request("aaaaaaaaaaaaaaaaaaaaaaaaaaa");
+                //test2.request("aaaaaaaaaaaaaaaaaaaaaaaaaaa");
                 break;
         }
     }

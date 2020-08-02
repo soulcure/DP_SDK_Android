@@ -8,10 +8,13 @@ package com.swaiotos.skymirror.sdk.data;
  */
 public class PortKey {
 
-    //for WebSocket port
-    public static final int PORT_HTTP_DATA = 31000;
+    //for WebSocket server port
+    public static final int PORT_WEB_SOCKET = 31000;
 
-    //for Socket port
-    public static final int PORT_SOCKET_VIDEO = 31004;
+    //for tcp server port
+    public static final int PORT_TCP = 31004;
+
+    //for upd server port
+    public static final int PORT_UDP = 32000;
 
 }

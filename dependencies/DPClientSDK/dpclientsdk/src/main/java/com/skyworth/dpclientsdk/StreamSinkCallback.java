@@ -11,6 +11,9 @@ public interface StreamSinkCallback {
     //local socket string data
     void onData(byte[] data);
 
+    //local socket string data
+    void onData(String data);
+
     //audio frame
     void onAudioFrame(MediaCodec.BufferInfo bufferInfo, ByteBuffer data);
 
