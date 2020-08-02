@@ -62,9 +62,9 @@ class MainActivity : Activity()/* : SSChannelClient.SSChannelClientActivity()*/ 
         params.width = 1
         window.setAttributes(params)*/
 
-        //etInputCaptureIp.setText(DeviceUtil.getLocalIPAddress(this))
+        etInputCaptureIp.setText(DeviceUtil.getLocalIPAddress(this))
         //etInputCaptureIp.setText("172.20.130.169")
-        etInputCaptureIp.setText("192.168.137.197")
+        //etInputCaptureIp.setText("192.168.137.197")
         //etInputCaptureIp.setText("192.168.0.3")
 
         versionName.text = BuildConfig.VERSION_NAME
