@@ -49,6 +49,22 @@ public interface DeviceAdminManager extends DeviceManager {
         void onDeviceUnBind(String lsid);
     }
 
+    interface OnDeviceInfoUpdateListener {
+        void onDeviceInfoUpdate(List<Device> devices);
+    }
+
+    interface OnDeviceInfoUpdateSDK {
+        void addDeviceInfoUpdateListener(OnDeviceInfoUpdateListener listener) throws RemoteException;
+
+        void removeDeviceInfoUpdateListener(OnDeviceInfoUpdateListener listener) throws RemoteException;
+    }
+
+    interface OnDeviceInfoUpdateCore {
+        void onDeviceInfoUpdateListener(OnDeviceInfoUpdateListener listener);
+
+        void onDeviceInfoUpdateList();
+    }
+
     void startBind(String accessToken, String bindCode, OnBindResultListener listener, long time) throws Exception;
     void unBindDevice(String accessToken, String lsid, int type, unBindResultListener listener) throws Exception;
 
@@ -59,6 +75,8 @@ public interface DeviceAdminManager extends DeviceManager {
     void addDeviceBindListener(OnDeviceBindListener listener) throws RemoteException;
 
     void removeDeviceBindListener(OnDeviceBindListener listener) throws RemoteException;
+
+
 
     List<Device> updateDeviceList();
 }

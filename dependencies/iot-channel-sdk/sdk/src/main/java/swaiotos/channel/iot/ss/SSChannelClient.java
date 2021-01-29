@@ -191,8 +191,12 @@ public class SSChannelClient {
             super.onCreate();
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+
+                NotificationChannel channel = new NotificationChannel("40", "App Service", NotificationManager.IMPORTANCE_DEFAULT);
+                channel.setSound(null, null);
+
                 //数字是随便写的“40”，
-                nm.createNotificationChannel(new NotificationChannel("40", "App Service", NotificationManager.IMPORTANCE_DEFAULT));
+                nm.createNotificationChannel(channel);
                 Notification.Builder builder = new Notification.Builder(this, "40");
 //            NotificationCompat.Builder builder = new NotificationCompat.Builder(this, "40");
 

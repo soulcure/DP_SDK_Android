@@ -45,7 +45,8 @@ public class Device<T extends DeviceInfo> implements Parcelable {
         int state = in.readInt();
         if (state > 0) {
             String stateJson = in.readString();
-            mDeviceState = DeviceState.parse(stateJson);//JSONObject.parseObject(stateJson, DeviceState.class);
+            if (!TextUtils.isEmpty(stateJson))
+                mDeviceState = DeviceState.parse(stateJson);//JSONObject.parseObject(stateJson, DeviceState.class);
 //        mDeviceState = in.readParcelable(DeviceState.class.getClassLoader());
         }
         status = in.readInt();
@@ -78,8 +79,10 @@ public class Device<T extends DeviceInfo> implements Parcelable {
     public final String encode() {
         JSONObject object = new JSONObject();
         object.put("id", mLsid);
-        object.put("info", mInfo.encode());
-        object.put("state", mDeviceState.encode());
+        if (mInfo != null)
+            object.put("info", mInfo.encode());
+        if (mDeviceState != null)
+            object.put("state", mDeviceState.encode());
         object.put("status", status);
         return object.toString();
     }
@@ -116,7 +119,7 @@ public class Device<T extends DeviceInfo> implements Parcelable {
         dest.writeString(mLsid);
         dest.writeInt(mInfo != null ? 1 : 0);
         if (mInfo != null) {
-            dest.writeString(JSONObject.toJSONString(mInfo));
+            dest.writeString(mInfo.encode());
         }
         dest.writeInt(mDeviceState != null ? 1 : 0);
         if (mDeviceState != null) {

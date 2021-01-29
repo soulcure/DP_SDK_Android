@@ -67,4 +67,9 @@ public class IIMChannelImpl implements IIMChannelClient {
     public IMMessage sendSync(IMMessage message, long timeout) throws Exception {
         return sendSync(message, IMMessageCallback.defaultIMMessageCallback, timeout);
     }
+
+    @Override
+    public void reset(String sid, String token) throws Exception {
+        mService.reset(sid, token);
+    }
 }

@@ -21,7 +21,7 @@ public class Command {
     public static final String FrameHeight = "frameHeight";
 
 
-    public static final String Live = "live";
+    public static final String Client = "client"; //client 心跳
 
 
     //server to client
@@ -31,9 +31,14 @@ public class Command {
     public static final String SendData = "sendData";
     public static final String Dog = "dog";
 
+
+    public static final String Server = "server"; //server 心跳
+
+
     //both
     public static final String Bye = "bye";
-
+    public static final String ErrCode = "errCode";
+    public static final String ErrMsg = "errMsg";
 
     public static final String COLON = ": ";
 
@@ -121,12 +126,11 @@ public class Command {
      *
      */
     public static String setFrameWH(boolean setWH, int width, int height) {
-        String sb = SetWH + COLON + setWH +
+        return SetWH + COLON + setWH +
                 "\n" +
                 FrameWidth + COLON + width +
                 "\n" +
                 FrameHeight + COLON + height;
-        return sb;
     }
 
 
@@ -151,8 +155,12 @@ public class Command {
     }
 
 
-    public static String setByeData(boolean status) {
-        return Bye + COLON + status;
+    public static String setByeData(boolean status, int errCode, String errMsg) {
+        return Bye + COLON + status +
+                "\n" +
+                ErrCode + COLON + errCode +
+                "\n" +
+                ErrMsg + COLON + errMsg;
     }
 
 
@@ -173,9 +181,22 @@ public class Command {
     }
 
 
-    public static String setLiveData(long ts) {
-        return Live + COLON + ts;
+    public static String setClientData(long ts) {
+        return Client + COLON + ts;
     }
 
+
+    public static String setServerHeatBeat(long ts) {
+        return Server + COLON + ts;
+    }
+
+
+    public static ServerHeartBeat getServerHeatBeat(String yamlStr) {
+        Yaml yaml = new Yaml();
+        return yaml.loadAs(yamlStr, ServerHeartBeat.class);
+    }
+
+
+    // Server
 
 }

@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <application
         android:name=".MyApplication"
         android:allowBackup="true"
@@ -22,8 +24,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTask"
-            android:theme="@style/TranslucentActivity">
+            android:launchMode="singleTask">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -37,8 +38,8 @@
 
         <!--1300370340-->
 
-        <service android:name=".DefaultCaptureService" />
-        <service android:name=".DefaultPlayerService" />
+        <service android:name="com.swaiotos.skymirror.sdk.reverse.ReverseCaptureService" />
+        <service android:name="com.swaiotos.skymirror.sdk.capture.MirClientService" />
 
         <service android:name=".ChannelClientService">
             <intent-filter>

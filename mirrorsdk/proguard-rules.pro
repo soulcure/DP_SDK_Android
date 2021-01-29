@@ -48,7 +48,7 @@
 
 -keep public class com.swaiotos.skymirror.sdk.data.DeviceInfo { *; }
 -keep public class com.swaiotos.skymirror.sdk.data.TouchData { *; }
--keep public class com.swaiotos.skymirror.sdk.manager.DeviceControllerManager { *; }
+-keep public class com.swaiotos.skymirror.sdk.capture.MirManager { *; }
 -keep public class com.swaiotos.skymirror.sdk.capture.IAudioService { *; }
 -keep public class com.swaiotos.skymirror.sdk.capture.IVideoService { *; }
 -keep public class com.swaiotos.skymirror.sdk.capture.INfcServiceCallback { *; }

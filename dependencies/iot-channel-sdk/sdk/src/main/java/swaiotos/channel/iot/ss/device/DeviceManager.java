@@ -17,5 +17,11 @@ public interface DeviceManager {
      */
     List<Device> getDevices() throws Exception;
 
+    /**
+     * 设备列表查询 并实时返回设备在线状态
+     */
+    List<Device> getDeviceOnlineStatus() throws Exception;
+
+
     Device getCurrentDevice() throws Exception;
 }

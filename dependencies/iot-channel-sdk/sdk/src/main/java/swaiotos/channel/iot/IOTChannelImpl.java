@@ -1,18 +1,22 @@
 package swaiotos.channel.iot;
 
+import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.IBinder;
+import android.os.RemoteException;
 import android.util.Log;
 
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import swaiotos.channel.iot.ss.IMainService;
 import swaiotos.channel.iot.ss.SSChannel;
 import swaiotos.channel.iot.ss.SSChannelImpl;
+import swaiotos.channel.iot.utils.ThreadManager;
 
 /**
  * @ClassName: IOTChannelImpl
@@ -21,14 +25,46 @@ import swaiotos.channel.iot.ss.SSChannelImpl;
  * @Description:
  */
 public class IOTChannelImpl implements IOTChannel {
+    private static final String TAG = "AIDL";
+
+
+    private enum BIND_STATUS {
+        IDLE, BINDING, BINDED
+    }
+
     static final String SS_ACTION = "swaiotos.intent.action.channel.iot.service.SS";
 
     private SSChannel mSSChannel = new SSChannelImpl();
     private S<IMainService> mService;
 
+    private IMainService mBindService;
+
+    private BIND_STATUS bind = BIND_STATUS.IDLE;
+
+    private IBinder.DeathRecipient mDeathRecipient = new IBinder.DeathRecipient() {
+
+        @Override
+        public void binderDied() {
+            Log.e(TAG, "IOT-Channel IBinder DeathRecipient");
+
+            if (mBindService == null) {
+                return;
+            }
+            mBindService.asBinder().unlinkToDeath(mDeathRecipient, 0);
+            mBindService = null;
+            bind = BIND_STATUS.IDLE;
+            mService.bind();
+        }
+    };
+
+
     @Override
-    public void open(Context context, IMainService service) throws Exception {
-        mSSChannel.open(context, service);
+    public void open(final Context context, final IMainService service) throws Exception {
+        try {
+            mSSChannel.open(context, service);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
@@ -37,17 +73,67 @@ public class IOTChannelImpl implements IOTChannel {
     }
 
     @Override
-    public void open(Context context, String packageName, OpenCallback callback) {
-        try {
-            performOpen(context, packageName, callback);
-        } catch (Exception e) {
-            e.printStackTrace();
+    public void open(final Context context, final String packageName, final OpenCallback callback) {
+        if (bind == BIND_STATUS.IDLE) {
+            Log.d(TAG, "IOTChannelImpl is binding...");
+            bind = BIND_STATUS.BINDING;
+            try {
+                performOpen(context, packageName, callback);
+            } catch (Exception e) {
+                bind = BIND_STATUS.IDLE;
+                Log.e(TAG, "IOTChannelImpl open error---" + e.getMessage());
+                e.printStackTrace();
+            }
+        } else if (bind == BIND_STATUS.BINDING) {
+            Log.d(TAG, "IOTChannelImpl is binding ,will do nothing");
+            //do nothing
+        } else if (bind == BIND_STATUS.BINDED) {
+            Log.d(TAG, "IOTChannelImpl is binded ,will call back immediately");
+            if (callback != null) {
+                callback.onConntected(mSSChannel);
+            }
         }
     }
 
     @Override
     public SSChannel getSSChannel() {
         return mSSChannel;
+    }
+
+
+    @Override
+    public boolean isOpen() {
+        return bind == BIND_STATUS.BINDED;
+    }
+
+    @Override
+    public boolean isServiceRun(Context context, int type) {
+        boolean isRun = false;
+        try {
+            ActivityManager activityManager = (ActivityManager) context
+                    .getSystemService(Context.ACTIVITY_SERVICE);
+            List<ActivityManager.RunningServiceInfo> serviceList = activityManager
+                    .getRunningServices(40);
+            int size = serviceList.size();
+            String className = "swaiotos.channel.iot.tv.PADChannelService";
+            if (type == 1) {
+                className = "swaiotos.channel.iot.tv.TVChannelService";
+            } else if (type == 2) {
+                className = "swaiotos.channel.iot.tv.PADChannelService";
+            } else if (type == 3) {
+
+            }
+            for (int i = 0; i < size; i++) {
+                if (serviceList.get(i).service.getClassName().equals(className)) {
+                    isRun = true;
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return isRun;
     }
 
     @Override
@@ -66,6 +152,7 @@ public class IOTChannelImpl implements IOTChannel {
                 e.printStackTrace();
             }
         }
+        bind = BIND_STATUS.IDLE;
     }
 
     private void performOpen(final Context context, String packageName, final OpenCallback callback) throws Exception {
@@ -77,22 +164,28 @@ public class IOTChannelImpl implements IOTChannel {
             }
 
             @Override
-            protected void onConntected(IMainService service) {
-                try {
-                    open(context, service);
-                    if (callback != null) {
-                        callback.onConntected(mSSChannel);
+            protected void onConntected(final IMainService service) {
+                ThreadManager.getInstance().ioThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            open(context, service);
+                            if (callback != null) {
+                                callback.onConntected(mSSChannel);
+                            }
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            mService.unbind();
+                            if (callback != null) {
+                                callback.onError(e.getMessage());
+                            }
+                        }
+                        if (latch != null) {
+                            latch.countDown();
+                        }
                     }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    mService.unbind();
-                    if (callback != null) {
-                        callback.onError(e.getMessage());
-                    }
-                }
-                if (latch != null) {
-                    latch.countDown();
-                }
+                });
+
             }
         };
         mService.bind();
@@ -102,7 +195,7 @@ public class IOTChannelImpl implements IOTChannel {
     }
 
 
-    static abstract class S<T> implements ServiceConnection {
+    private abstract class S<T> implements ServiceConnection {
         private Context mContext;
         private Intent mIntent;
         private T mService;
@@ -131,19 +224,29 @@ public class IOTChannelImpl implements IOTChannel {
 
         @Override
         public void onServiceConnected(ComponentName name, final IBinder service) {
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    mService = transform(service);
-                    onConntected(mService);
-                }
-            }).start();
+            Log.d(TAG, "IOT-Channel onServiceConnected...");
+
+            mService = transform(service);
+            onConntected(mService);
+
+            mBindService = IMainService.Stub.asInterface(service);
+            try {
+                //server端死亡 代理回调
+                service.linkToDeath(mDeathRecipient, 0);
+            } catch (RemoteException e) {
+                e.printStackTrace();
+            }
+
+            bind = BIND_STATUS.BINDED;
         }
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
-            Log.d("S", "onServiceDisconnected@" + name);
-            bind();
+            Log.e("S", "IOT-Channel onServiceDisconnected@" + name);
+            mService = null;
+            mBindService = null;
+            bind = BIND_STATUS.IDLE;
+            //bind();
         }
     }
 }

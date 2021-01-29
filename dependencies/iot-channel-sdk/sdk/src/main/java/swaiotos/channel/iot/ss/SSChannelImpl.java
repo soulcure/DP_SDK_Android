@@ -32,13 +32,17 @@ public class SSChannelImpl implements SSChannel {
     }
 
     @Override
-    public void open(Context context, IMainService service) throws Exception {
-        IMainService mMainService = service;
-        ParcelableBinder s = mMainService.open(context.getApplicationContext().getPackageName());
-        if (s.code == 0) {
-            open(ISSChannelService.Stub.asInterface(s.mBinder));
-        } else {
-            throw new Exception(s.extra);
+    public void open(final Context context, final IMainService service) throws Exception {
+        try {
+            IMainService mMainService = service;
+            ParcelableBinder s = mMainService.open(context.getApplicationContext().getPackageName());
+            if (s.code == 0) {
+                open(ISSChannelService.Stub.asInterface(s.mBinder));
+            } else {
+                throw new Exception(s.extra);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 

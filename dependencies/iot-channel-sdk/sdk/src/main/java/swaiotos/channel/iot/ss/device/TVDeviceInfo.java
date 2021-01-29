@@ -2,6 +2,9 @@ package swaiotos.channel.iot.ss.device;
 
 import android.os.Parcel;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 /**
  * @ClassName: TVDeviceInfo
  * @Author: lu
@@ -111,26 +114,25 @@ public class TVDeviceInfo extends DeviceInfo {
         dest.writeString(mNickName);
     }
 
-    @Override
-    public String encode() {
-        return "TVDeviceInfo[\n"
-                + "activeId:" + activeId + "\n"
-                + "deviceName:" + deviceName + "\n"
-                + "moviesource:" + mMovieSource + "\n"
-                + "chip:" + mChip + "\n"
-                + "model:" + mModel + "\n"
-                + "size:" + mSize + "\n"
-                + "cHomepageVersion:" + cHomepageVersion + "\n"
-                + "MAC:" + MAC + "\n"
-                + "cFMode:" + cFMode + "\n"
-                + "cTcVersion:" + cTcVersion + "\n"
-                + "cPattern:" + cPattern + "\n"
-                + "Resolution:" + Resolution + "\n"
-                + "aSdk:" + aSdk + "\n"
-                + "cEmmcCID:" + cEmmcCID + "\n"
-                + "cBrand:" + cBrand + "\n"
-                + "nickName:" + mNickName + "]";
-    }
+//    public String encode() {
+//        return "TVDeviceInfo[\n"
+//                + "activeId:" + activeId + "\n"
+//                + "deviceName:" + deviceName + "\n"
+//                + "moviesource:" + mMovieSource + "\n"
+//                + "chip:" + mChip + "\n"
+//                + "model:" + mModel + "\n"
+//                + "size:" + mSize + "\n"
+//                + "cHomepageVersion:" + cHomepageVersion + "\n"
+//                + "MAC:" + MAC + "\n"
+//                + "cFMode:" + cFMode + "\n"
+//                + "cTcVersion:" + cTcVersion + "\n"
+//                + "cPattern:" + cPattern + "\n"
+//                + "Resolution:" + Resolution + "\n"
+//                + "aSdk:" + aSdk + "\n"
+//                + "cEmmcCID:" + cEmmcCID + "\n"
+//                + "cBrand:" + cBrand + "\n"
+//                + "nickName:" + mNickName + "]";
+//    }
 
     public static final Creator<TVDeviceInfo> CREATOR = new Creator<TVDeviceInfo>() {
         @Override
@@ -143,4 +145,73 @@ public class TVDeviceInfo extends DeviceInfo {
             return new TVDeviceInfo[size];
         }
     };
+
+    @Override
+    public String encode() {
+        JSONObject object = new JSONObject();
+        try {
+            object.put("activeId", activeId);
+            object.put("deviceName", deviceName);
+            object.put("mMovieSource", mMovieSource);
+            object.put("mChip", mChip);
+            object.put("mModel", mModel);
+            object.put("mSize", mSize);
+            object.put("cHomepageVersion", cHomepageVersion);
+            object.put("MAC", MAC);
+            object.put("cFMode", cFMode);
+            object.put("cTcVersion", cTcVersion);
+            object.put("cPattern", cPattern);
+            object.put("Resolution", Resolution);
+            object.put("aSdk", aSdk);
+            object.put("cEmmcCID", cEmmcCID);
+            object.put("cBrand", cBrand);
+            object.put("mNickName", mNickName);
+            object.put("clazzName",clazzName);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        return object.toString();
+    }
+
+    public static TVDeviceInfo parse(String in) {
+        try {
+            JSONObject object = new JSONObject(in);
+            String activeId = object.getString("activeId");
+            String deviceName = object.getString("deviceName");
+            String mMovieSource = object.getString("mMovieSource");
+            String mChip = object.getString("mChip");
+            String mModel = object.getString("mModel");
+            String mSize = object.getString("mSize");
+            String cHomepageVersion = object.getString("cHomepageVersion");
+            String MAC = object.getString("MAC");
+            String cFMode = object.getString("cFMode");
+            String cTcVersion = object.getString("cTcVersion");
+            String cPattern = object.getString("cPattern");
+            String Resolution = object.getString("Resolution");
+            String aSdk = object.getString("aSdk");
+            String cEmmcCID = object.getString("cEmmcCID");
+            String cBrand = object.getString("cBrand");
+            String mNickName = object.getString("mNickName");
+
+            return new TVDeviceInfo(activeId,
+                     deviceName,
+                     mMovieSource,
+                     mChip,
+                     mModel,
+                     mSize,
+                     cHomepageVersion,
+                     MAC,
+                     cFMode,
+                     cTcVersion,
+                     cPattern,
+                     Resolution,
+                     aSdk,
+                     cEmmcCID,
+                     cBrand,
+                    mNickName);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
 }

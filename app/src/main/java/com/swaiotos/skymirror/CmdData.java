@@ -44,11 +44,11 @@ public class CmdData {
          */
         SCREEN_SHOT,
         /*
-        * 反向投屏控制
+        * 同屏控制
         * */
         REVERSE_SCREEN,
         /*
-         * 镜像控制
+         * 屏幕镜像
          * */
         MIRROR_SCREEN,
     }

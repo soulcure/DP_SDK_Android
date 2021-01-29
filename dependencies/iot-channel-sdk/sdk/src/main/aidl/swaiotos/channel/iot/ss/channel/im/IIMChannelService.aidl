@@ -10,4 +10,6 @@ import swaiotos.channel.iot.utils.ipc.ParcelableObject;
 interface IIMChannelService {
     void send(in IMMessage message,in Messenger callback);
     ParcelableObject sendSync(in IMMessage message,in Messenger callback,long timeout);
+
+    void reset(in String sid, in String token);
 }

@@ -20,6 +20,11 @@ public class DeviceManagerImpl implements DeviceManagerClient {
     }
 
     @Override
+    public List<Device> getDeviceOnlineStatus() throws Exception {
+        return mService.getDeviceOnlineStatus();
+    }
+
+    @Override
     public Device getCurrentDevice() throws Exception {
         return mService.getCurrentDevice();
     }

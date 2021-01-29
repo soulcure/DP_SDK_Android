@@ -10,11 +10,11 @@ import swaiotos.channel.iot.ss.controller.Controller;
 import swaiotos.channel.iot.ss.controller.ControllerClient;
 import swaiotos.channel.iot.ss.controller.ControllerImpl;
 import swaiotos.channel.iot.ss.controller.IControllerService;
-import swaiotos.channel.iot.ss.device.DeviceAdminManagerImpl;
 import swaiotos.channel.iot.ss.device.DeviceAdminManager;
 import swaiotos.channel.iot.ss.device.DeviceAdminManagerClient;
-import swaiotos.channel.iot.ss.device.IDeviceAdminManagerService;
+import swaiotos.channel.iot.ss.device.DeviceAdminManagerImpl;
 import swaiotos.channel.iot.ss.device.DeviceManager;
+import swaiotos.channel.iot.ss.device.IDeviceAdminManagerService;
 import swaiotos.channel.iot.ss.session.SessionManager;
 import swaiotos.channel.iot.utils.ipc.ParcelableBinder;
 
@@ -33,9 +33,13 @@ public class SSAdminChannelImpl implements SSAdminChannel {
     }
 
     @Override
-    public void open(Context context, IMainService mainService) throws Exception {
-        ParcelableBinder service = mainService.open(context.getApplicationContext().getPackageName());
-        open(ISSChannelService.Stub.asInterface(service.mBinder));
+    public void open(final Context context, final IMainService mainService) throws Exception {
+        try {
+            ParcelableBinder service = mainService.open(context.getApplicationContext().getPackageName());
+            open(ISSChannelService.Stub.asInterface(service.mBinder));
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     @Override

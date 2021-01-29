@@ -3,15 +3,23 @@
     package="com.swaiotos.skymirror.sdk">
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.CAPTURE_VIDEO_OUTPUT"
+    <uses-permission
+        android:name="android.permission.CAPTURE_VIDEO_OUTPUT"
         tools:ignore="ProtectedPermissions" />
-    <uses-permission android:name="android.permission.CAPTURE_SECURE_VIDEO_OUTPUT"
+    <uses-permission
+        android:name="android.permission.CAPTURE_SECURE_VIDEO_OUTPUT"
         tools:ignore="ProtectedPermissions" />
-    <uses-permission android:name="android.permission.INJECT_EVENTS"
+    <uses-permission
+        android:name="android.permission.INJECT_EVENTS"
         tools:ignore="ProtectedPermissions" />
 
     <application>
-        <activity android:name=".reverse.PlayerActivity"/>
+        <activity
+            android:name="com.swaiotos.skymirror.sdk.reverse.PlayerActivity"
+            android:theme="@style/AppTheme.Main" />
+        <activity
+            android:name="com.swaiotos.skymirror.sdk.capture.DialogActivity"
+            android:theme="@style/DialogActivity" />
     </application>
 
 </manifest>

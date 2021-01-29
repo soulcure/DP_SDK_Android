@@ -1,7 +1,5 @@
 package swaiotos.channel.iot.ss.channel.im;
 
-import swaiotos.channel.iot.ss.session.Session;
-
 /**
  * @ClassName: IIMChannelCore
  * @Author: lu

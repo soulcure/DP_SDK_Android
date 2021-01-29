@@ -24,6 +24,10 @@ ext {
     recyclerview_v7 = '23.2.0'
 
     multidex = '1.0.2'
+
+
+    version_code = getVersionCode()
+    version_name = getVersionName()
 }
 
 File getProjectDir(String dir) {
@@ -64,4 +68,25 @@ String getSDKPathFromLocalProperty() {
 
 String getLayoutlibJar() {
     return getProjectDir("build-libs" + File.separator + "layoutlib.jar").absolutePath
+}
+
+int getVersionCode() {
+    def cmd = 'git rev-list HEAD --first-parent --count'
+    return cmd.execute().text.trim().toInteger()
+}
+
+String getVersionName() {
+    def cmd = 'git describe --tags'
+    def version = cmd.execute().text.trim()
+
+    def pattern = "-(\\d+)-g"
+    def matcher = version =~ pattern
+
+    if (matcher) {
+        version = version.substring(0, matcher.start()) + "." + matcher[0][1]
+    } else {
+        version = version + ".0"
+    }
+
+    return version
 }

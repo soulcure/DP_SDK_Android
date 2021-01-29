@@ -66,6 +66,20 @@ public interface IOTChannel {
     SSChannel getSSChannel();
 
     /**
+     * 是否绑定
+     */
+    boolean isOpen();
+
+
+    /**
+     * 判断服务存不存在
+     *
+     * @param context 上下文句柄
+     * @param type    1:tv 2:pad 3:phone/mobile
+     */
+    boolean isServiceRun(Context context, int type);
+
+    /**
      * 解绑
      */
     void close();

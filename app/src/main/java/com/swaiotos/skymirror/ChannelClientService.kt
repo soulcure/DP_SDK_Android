@@ -4,9 +4,11 @@ import android.content.Intent
 import android.os.IBinder
 import android.text.TextUtils
 import android.util.Log
+import android.widget.Toast
 import com.google.gson.Gson
-import com.swaiotos.skymirror.sdk.manager.DeviceControllerManager
-import com.swaiotos.skymirror.sdk.reverse.IPlayerInitListener
+import com.swaiotos.skymirror.sdk.capture.MirManager
+import com.swaiotos.skymirror.sdk.capture.MirManager.InitListener
+import com.swaiotos.skymirror.sdk.reverse.PlayerActivity
 import swaiotos.channel.iot.ss.SSChannel
 import swaiotos.channel.iot.ss.SSChannelClient
 import swaiotos.channel.iot.ss.channel.im.IMMessage
@@ -26,120 +28,159 @@ class ChannelClientService : SSChannelClient.SSChannelClientService("ChannelClie
 
     override fun handleIMMessage(message: IMMessage?, channel: SSChannel?): Boolean {
 
-        Log.e("lfzzzz", "handleIMMessage: message --- $message")
+        Log.e("cmd", "handleIMMessage: message --- $message")
         val content = message!!.content
-        Log.e("lfzzzz", "handleIMMessage: content --- $content")
+        Log.e("cmd", "handleIMMessage: content --- $content")
         val gson = Gson()
         val msg = gson.fromJson(content, CmdData::class.java)
-        //接收到接收端开始消息
+        //接收到接收端开始消息,正常状况，开启MirClientService，开始录屏
         if (msg.cmd == ReverseScreenParams.CMD.START_REVERSE.toString()) {
             if (TextUtils.isEmpty(msg.param)) {
-                Log.e("MainActivity", "iot-channel param is null")
+                Log.e("MirClientService", "iot-channel param is null")
                 return false
             }
 
-            val serverIp = gson.fromJson(msg.param, ServerIpData::class.java).ip
+            if (MirManager.instance().isMirRunning) {//已经被同屏控制
+                //正在镜像，通知对方退出
+                val reverse = ReverseScreenParams()
+                reverse.ip = "";
+                val cmdData = CmdData(
+                    ReverseScreenParams.CMD.STOP_REVERSE.toString(),
+                    CmdData.CMD_TYPE.REVERSE_SCREEN.toString(),
+                    reverse.toJson()
+                )
 
-            if (TextUtils.isEmpty(serverIp)) {
-                Log.e("MainActivity", "iot-channel ip is null")
-                return false
+                if (channel != null) {
+                    sendChannelMessage(message, channel, cmdData.toJson())
+                }
+                Log.e("MirClientService", "自己已经被同屏控制了，通知对方退出...")
+
+            } else { //没有被同屏控制
+                val serverIp = gson.fromJson(msg.param, ServerIpData::class.java).ip
+                if (TextUtils.isEmpty(serverIp)) {
+                    Log.e("MirClientService", "iot-channel ip is null")
+                    return false
+                }
+                //开始镜像
+                Log.d("MirClientService", "START_REVERSE from iot-channel ip---$serverIp")
+
+                MirManager.instance().startScreenCapture(this, serverIp)
+                Log.e("colin", "colin start time01 --- tv start MirClientService by iot-channel")
             }
-            //开始镜像
-            val intent = Intent(this, MainActivity::class.java)
-            intent.setAction("action_startCapture")
-            intent.putExtra("serverIp", serverIp)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(intent)
 
-            return false
         }
 
         //接收到接收端结束消息
-        if (msg.cmd == ReverseScreenParams.CMD.STOP_REVERSE.toString()) {
-            //结束镜像
-            DeviceControllerManager.getInstance()
-                .stopScreenCapture(this, DefaultCaptureService::class.java)
-            return false
+        else if (msg.cmd == ReverseScreenParams.CMD.STOP_REVERSE.toString()) {
+            //结束所有服务
+            MirManager.instance().stopAll(this);
+            Toast.makeText(this, "同屏控制失败", Toast.LENGTH_SHORT).show()
+
+            Log.e("MirClientService", "目标已经被同屏控制了...")
+            return true;
         }
-        //接收到发送端开始消息
-        if (msg.cmd == MirrorScreenParams.CMD.START_MIRROR.toString()) {
+        //电视端接收到 屏幕镜像 消息，正常状况，绑定ReverseCaptureService，启动PlayerActivity，开始解码播放
+        else if (msg.cmd == MirrorScreenParams.CMD.START_MIRROR.toString()) {
+            if (MirManager.instance().isReverseRunning) {
+                //正在镜像，通知对方退出
+                val mirror = MirrorScreenParams()
+                mirror.result = false;
 
-            //开始前调用下stop,防止adress in used
-            DeviceControllerManager.getInstance()
-                .stopReverseScreenPlayer(this, DefaultPlayerService::class.java)
-            DeviceControllerManager.getInstance()
-                .stopScreenCapture(this, DefaultCaptureService::class.java)
+                val cmdData = CmdData(
+                    MirrorScreenParams.CMD.STOP_MIRROR.toString(),
+                    CmdData.CMD_TYPE.MIRROR_SCREEN.toString(),
+                    mirror.toJson()
+                )
+                if (channel != null) {
+                    sendChannelMessage(message, channel, cmdData.toJson())
+                }
 
-            DeviceControllerManager.getInstance()
-                .startReverseScreenPlayer(this, DefaultPlayerService::class.java)
-            DeviceControllerManager.getInstance()
-                .setReverseInitListener(object : IPlayerInitListener {
-                    override fun onInitStatus(isInit: Boolean) {
-                        Log.e("lfzzz", "isInit --- " + isInit)
-                        if (channel != null) {
-                            sendChannelMessage(message, channel, isInit)
-                        } else {
-                            Log.e("lfzzz", "iot-channel reSend failed be channel is null")
+                Log.e("PlayerDecoder", "目标已经被屏幕镜像了，通知对方退出...")
+
+            } else {
+                MirManager.instance().init(this,
+                    object : InitListener {
+                        override fun success() {
+                            PlayerActivity.obtainPlayer(this@ChannelClientService) { b ->
+                                if (b && channel != null) {
+
+                                    val mirror = MirrorScreenParams()
+                                    mirror.result = true;
+                                    val cmdData = CmdData(
+                                        MirrorScreenParams.CMD.START_MIRROR.toString(),
+                                        CmdData.CMD_TYPE.MIRROR_SCREEN.toString(),
+                                        mirror.toJson()
+                                    )
+
+                                    sendChannelMessage(message, channel, cmdData.toJson())
+                                    Log.d("PlayerDecoder", "屏幕镜像TV端初始化完成，发送指令给PAD开始传屏")
+                                }
+                            }
                         }
-                    }
-                })
-            return false
+
+                        override fun fail() {
+                            Toast.makeText(
+                                this@ChannelClientService,
+                                "解码服务绑定失败", Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    })
+
+                Log.d("PlayerDecoder", "屏幕镜像开始，TV端开始初始化...")
+            }
+
+
+
+            return true;
         }
         //接收到发送端结束消息
-        if (msg.cmd == MirrorScreenParams.CMD.STOP_MIRROR.toString()) {
-            //DeviceControllerManager.getInstance()
-                //.stopReverseScreenPlayer(this, DefaultPlayerService::class.java)
-            return false
+        else if (msg.cmd == MirrorScreenParams.CMD.STOP_MIRROR.toString()) {
+            //结束所有服务
+            MirManager.instance().stopAll(this);
+            Toast.makeText(this, "屏幕镜像失败", Toast.LENGTH_SHORT).show()
+            return true;
         }
         return false
     }
 
-    fun sendChannelMessage(message: IMMessage, channel: SSChannel, result: Boolean): Unit {
 
+    /**
+     * 回复对方消息
+     */
+    private fun sendChannelMessage(message: IMMessage, channel: SSChannel, cmd: String): Unit {
         try {
-            val mirror = MirrorScreenParams()
-            mirror.result = result
+            Log.d("cmd", "target --- " + message.target)
+            Log.d("cmd", "source --- " + message.source)
+            Log.d("cmd", "clientTarget --- " + message.clientTarget)
+            Log.d("cmd", "clientSource --- " + message.clientSource)
+            Log.d("cmd", "cmdData --- $cmd")
 
-            val cmdData = CmdData(
-                MirrorScreenParams.CMD.START_MIRROR.toString(),
-                CmdData.CMD_TYPE.MIRROR_SCREEN.toString(),
-                mirror.toJson()
+            val imMessage = IMMessage.Builder.createTextMessage(
+                /*message.source,*/  message.target,
+                /*message.target,*/ message.source,
+                /*message.clientSource,*/message.clientTarget,
+                /*message.clientTarget,*/ message.clientSource,
+                cmd
             )
-
-            Log.e("lfzzz", "target --- " + message.target)
-            Log.e("lfzzz", "source --- " + message.source)
-            Log.e("lfzzz", "clientTarget --- " + message.clientTarget)
-            Log.e("lfzzz", "clientSource --- " + message.clientSource)
-            Log.e("lfzzz", "cmdData --- " + cmdData.toJson())
-
-            val imMessage =
-                IMMessage.Builder.createTextMessage(
-                    /*message.source,*/  message.target,
-                    /*message.target,*/ message.source,
-                    /*message.clientSource,*/message.clientTarget,
-                    /*message.clientTarget,*/ message.clientSource,
-                    cmdData.toJson()
-                )
 
             imMessage.putExtra("response", message.content.toString())
 
             channel.imChannel.send(imMessage, object : IMMessageCallback {
                 override fun onProgress(message: IMMessage?, progress: Int) {
-                    Log.e("lfzzz", "onProgress --- " + progress)
+                    Log.e("cmd", "onProgress --- " + progress)
                 }
 
                 override fun onEnd(message: IMMessage?, code: Int, info: String?) {
-                    Log.e("lfzzz", "onEnd --- " + code)
+                    Log.e("cmd", "onEnd --- " + code)
                 }
 
                 override fun onStart(message: IMMessage?) {
-                    Log.e("lfzzz", "onStart --- ")
+                    Log.e("cmd", "onStart --- ")
                 }
             })
         } catch (e: Exception) {
-            Log.e("lfzzz", "iot-channel reSend failed --- " + e.message)
+            Log.e("cmd", "iot-channel reSend failed --- " + e.message)
         }
 
     }
-
 }

@@ -1,12 +1,6 @@
 package com.swaiotos.skymirror;
 
-import android.util.Log;
-
 import com.google.gson.Gson;
-
-import swaiotos.channel.iot.ss.SSChannel;
-import swaiotos.channel.iot.ss.channel.im.IMMessage;
-import swaiotos.channel.iot.ss.channel.im.IMMessageCallback;
 
 /**
  * @ClassName DeviceParams

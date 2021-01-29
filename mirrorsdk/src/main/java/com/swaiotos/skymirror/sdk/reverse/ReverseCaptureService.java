@@ -2,8 +2,8 @@ package com.swaiotos.skymirror.sdk.reverse;
 
 import android.app.Service;
 import android.content.Intent;
+import android.os.Binder;
 import android.os.IBinder;
-import android.util.Log;
 import android.view.Surface;
 
 
@@ -16,57 +16,62 @@ import android.view.Surface;
  * 1.目前开始的时候会开启多个 httpserver, 后期可以换为1个固定server通道实现连接操作
  * PS：
  */
-public abstract class ReverseCaptureService extends Service {
+public class ReverseCaptureService extends Service {
 
-    private final static String TAG = ReverseCaptureService.class.getSimpleName();
+    private PlayerDecoder decoder;
+    private IPlayerInitListener initListener;
 
-    private static PlayerDecoder decoder;
+    /**
+     * activity和service通信接口
+     */
+    public class ReverseServiceBinder extends Binder {
 
-    protected abstract void initNotification();
+
+        public PlayerDecoder getPlayerDecoder() {
+            return decoder;
+        }
+
+        public void setInitListener(IPlayerInitListener listener) {
+            initListener = listener;
+        }
+
+        public void startReverse(Surface surface, IPlayerListener playerListener,
+                                 IDrawListener drawListener) {
+            decoder.setSurface(surface);
+            decoder.setPlayerListener(playerListener);
+            decoder.setDrawListener(drawListener);
+
+            if (initListener != null) {
+                initListener.onInitStatus(true);
+            }
+        }
+
+        public void stopReverse() {
+            if (decoder != null) {
+                decoder.mirServerStop(IPlayerListener.ERR_CODE_SERVICE_DESTROY,
+                        IPlayerListener.ERR_MSG_SERVICE_DESTROY, false);
+                decoder = null;
+            }
+        }
+
+    }
+
 
     @Override
     public IBinder onBind(Intent intent) {
-        return null;
+        return new ReverseServiceBinder();
     }
 
 
     @Override
     public void onCreate() {
         super.onCreate();
-    }
-
-    public static PlayerDecoder getDecoder() {
-        return decoder;
-    }
-
-    private static IPlayerInitListener mListener;
-
-    public static void setReverseInitListener(IPlayerInitListener listener) {
-        mListener = listener;
+        decoder = new PlayerDecoder(this);
     }
 
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        initNotification();
-        if (intent != null && intent.getExtras() != null) {
-            Surface surface = intent.getExtras().getParcelable("surface");
-            if (surface != null) {
-                Log.e(TAG, "onStartCommand custom surface");
-                decoder = new PlayerDecoder(this, surface);
-            }
-        }
-
-        if (decoder == null) {
-            decoder = new PlayerDecoder(this);
-        }
-
-        if (mListener != null) {
-            mListener.onInitStatus(true);
-        }
-
-        Log.d("playerDecoder", "onStartCommand: reverseCaptureService init success");
-
         return START_NOT_STICKY;
     }
 
@@ -75,7 +80,8 @@ public abstract class ReverseCaptureService extends Service {
     public void onDestroy() {
         super.onDestroy();
         if (decoder != null) {
-            decoder.mirServerStop(10);
+            decoder.mirServerStop(IPlayerListener.ERR_CODE_SERVICE_DESTROY,
+                    IPlayerListener.ERR_MSG_SERVICE_DESTROY, false);
             decoder = null;
         }
     }

@@ -6,12 +6,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-public class DeviceAdminManagerImpl implements DeviceAdminManagerClient {
+public class DeviceAdminManagerImpl implements DeviceAdminManagerClient,DeviceAdminManager.OnDeviceInfoUpdateSDK {
     private IDeviceAdminManagerService mService;
     private DeviceManager mDeviceManager;
     private Map<OnDeviceChangedListener, IOnDeviceChangedListener> mOnDeviceChangedListeners = new LinkedHashMap<>();
     private Map<OnDeviceBindListener, IDeviceBindListener> mOnDeviceBindListeners = new LinkedHashMap<>();
-
+    private Map<OnDeviceInfoUpdateListener, IDeviceInfoUpdateListener> mOnDeviceInfoUpdateListeners = new LinkedHashMap<>();
 
     public DeviceAdminManagerImpl() {
     }
@@ -126,8 +126,41 @@ public class DeviceAdminManagerImpl implements DeviceAdminManagerClient {
     }
 
     @Override
+    public void addDeviceInfoUpdateListener(final OnDeviceInfoUpdateListener listener) throws RemoteException {
+        synchronized (mOnDeviceInfoUpdateListeners) {
+            if (!mOnDeviceInfoUpdateListeners.containsKey(listener)) {
+                final IDeviceInfoUpdateListener l = new IDeviceInfoUpdateListener.Stub() {
+
+                    @Override
+                    public void onDeviceInfoUpdate(List<Device> devices) throws RemoteException {
+                        listener.onDeviceInfoUpdate(devices);
+                    }
+                };
+                mOnDeviceInfoUpdateListeners.put(listener, l);
+                mService.addDeviceInfoUpdateListener(l);
+            }
+        }
+    }
+
+    @Override
+    public void removeDeviceInfoUpdateListener(OnDeviceInfoUpdateListener listener) throws RemoteException {
+        synchronized (mOnDeviceInfoUpdateListeners) {
+            IDeviceInfoUpdateListener l = mOnDeviceInfoUpdateListeners.get(listener);
+            if (l != null) {
+                mService.removeDeviceInfoUpdateListener(l);
+                mOnDeviceInfoUpdateListeners.remove(listener);
+            }
+        }
+    }
+
+    @Override
     public List<Device> getDevices() throws Exception {
         return mDeviceManager.getDevices();
+    }
+
+    @Override
+    public List<Device> getDeviceOnlineStatus() throws Exception {
+        return mDeviceManager.getDeviceOnlineStatus();
     }
 
     @Override

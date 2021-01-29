@@ -2,6 +2,9 @@ package swaiotos.channel.iot.ss.device;
 
 import android.os.Parcel;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 /**
  * @ClassName: PadDeviceInfo
  * @Author: lu
@@ -12,7 +15,7 @@ public class PadDeviceInfo extends DeviceInfo {
     public String activeId;             //激活ID
     public String deviceName;           //设备名称
     public String mChip, mModel, mSize; //机芯、机型、大小
-    public String mAccount;             //酷开账号
+    public String mUserId;             //酷开账号
     public String mNickName;            //酷开账号昵称
 
     public PadDeviceInfo() {
@@ -23,14 +26,14 @@ public class PadDeviceInfo extends DeviceInfo {
                          String chip,
                          String model,
                          String size,
-                         String account,
+                         String userId,
                          String nickName) {
         this.activeId = activeId;
         this.deviceName = deviceName;
         this.mChip = chip;
         this.mModel = model;
         this.mSize = size;
-        this.mAccount = account;
+        this.mUserId = userId;
         this.mNickName = nickName;
     }
 
@@ -40,7 +43,7 @@ public class PadDeviceInfo extends DeviceInfo {
         this.mChip = source.readString();
         this.mModel = source.readString();
         this.mSize = source.readString();
-        this.mAccount = source.readString();
+        this.mUserId = source.readString();
         this.mNickName = source.readString();
     }
 
@@ -61,22 +64,22 @@ public class PadDeviceInfo extends DeviceInfo {
         dest.writeString(mChip);
         dest.writeString(mModel);
         dest.writeString(mSize);
-        dest.writeString(mAccount);
+        dest.writeString(mUserId);
         dest.writeString(mNickName);
     }
 
-    @Override
-    public String encode() {
-        return "PadDeviceInfo[\n"
-                + "activeId:" + activeId + "\n"
-                + "deviceName:" + deviceName + "\n"
-                + "chip:" + mChip + "\n"
-                + "model:" + mModel + "\n"
-                + "size:" + mSize + "\n"
-                + "account:" + mAccount + "\n"
-                + "nickName:" + mNickName
-                + "]";
-    }
+//    @Override
+//    public String encode() {
+//        return "PadDeviceInfo[\n"
+//                + "activeId:" + activeId + "\n"
+//                + "deviceName:" + deviceName + "\n"
+//                + "chip:" + mChip + "\n"
+//                + "model:" + mModel + "\n"
+//                + "size:" + mSize + "\n"
+//                + "userId:" + mUserId + "\n"
+//                + "nickName:" + mNickName
+//                + "]";
+//    }
 
     public static final Creator<PadDeviceInfo> CREATOR = new Creator<PadDeviceInfo>() {
         @Override
@@ -89,4 +92,46 @@ public class PadDeviceInfo extends DeviceInfo {
             return new PadDeviceInfo[size];
         }
     };
+
+    @Override
+    public String encode() {
+        JSONObject object = new JSONObject();
+        try {
+            object.put("activeId", activeId);
+            object.put("deviceName", deviceName);
+            object.put("mChip", mChip);
+            object.put("mModel", mModel);
+            object.put("mSize", mSize);
+            object.put("mUserId", mUserId);
+            object.put("mNickName", mNickName);
+            object.put("clazzName",clazzName);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        return object.toString();
+    }
+
+    public static PadDeviceInfo parse(String in) {
+        try {
+            JSONObject object = new JSONObject(in);
+            String activeId = object.getString("activeId");
+            String deviceName = object.getString("deviceName");
+            String mChip = object.getString("mChip");
+            String mModel = object.getString("mModel");
+            String mSize = object.getString("mSize");
+            String mUserId = object.getString("mUserId");
+            String mNickName = object.getString("mNickName");
+
+            return new PadDeviceInfo(activeId,
+                    deviceName,
+                    mChip,
+                    mModel,
+                    mSize,
+                    mUserId,
+                    mNickName);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
 }

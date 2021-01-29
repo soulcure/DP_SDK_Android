@@ -1,7 +1,6 @@
 package com.swaiotos.skymirror
 
 import android.app.Application
-import com.swaiotos.skymirror.sdk.manager.DeviceControllerManager
 
 /**
  * @ClassName: MyApplication
@@ -13,6 +12,5 @@ class MyApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        DeviceControllerManager.getInstance().init()
     }
 }

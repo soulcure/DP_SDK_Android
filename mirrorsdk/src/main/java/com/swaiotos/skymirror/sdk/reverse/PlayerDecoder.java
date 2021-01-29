@@ -1,38 +1,47 @@
 package com.swaiotos.skymirror.sdk.reverse;
 
-import android.app.Service;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.media.MediaFormat;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
+import android.util.Range;
+import android.view.MotionEvent;
 import android.view.Surface;
 
 import androidx.annotation.RequiresApi;
 
+import com.skyworth.dpclientsdk.ConnectState;
+import com.skyworth.dpclientsdk.RequestCallback;
+import com.skyworth.dpclientsdk.StreamSinkCallback;
+import com.skyworth.dpclientsdk.TcpServer;
 import com.skyworth.dpclientsdk.UdpServer;
 import com.skyworth.dpclientsdk.WebSocketServer;
+import com.swaiotos.skymirror.sdk.Command.Bye;
 import com.swaiotos.skymirror.sdk.Command.CheckVer;
 import com.swaiotos.skymirror.sdk.Command.ClientIpCodec;
 import com.swaiotos.skymirror.sdk.Command.Command;
 import com.swaiotos.skymirror.sdk.Command.FrameWH;
+import com.swaiotos.skymirror.sdk.capture.MirManager;
 import com.swaiotos.skymirror.sdk.data.FrameInfo;
+import com.swaiotos.skymirror.sdk.data.MediaCodecConfig;
 import com.swaiotos.skymirror.sdk.data.PortKey;
-import com.skyworth.dpclientsdk.ConnectState;
-import com.skyworth.dpclientsdk.RequestCallback;
-import com.skyworth.dpclientsdk.StreamChannelSink;
-import com.skyworth.dpclientsdk.StreamSinkCallback;
 import com.swaiotos.skymirror.sdk.util.DLNACommonUtil;
+import com.swaiotos.skymirror.sdk.util.MediaConfig;
 
 import java.nio.ByteBuffer;
+import java.nio.channels.SocketChannel;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
-
-import static com.swaiotos.skymirror.sdk.reverse.IPlayerListener.CODE_DECODER_ERROR;
-import static com.swaiotos.skymirror.sdk.reverse.IPlayerListener.CODE_SOCKET_ERROR;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -43,33 +52,27 @@ public class PlayerDecoder {
 
     //常量定义--start---
     private static final String TAG = PlayerDecoder.class.getSimpleName();
-    private static final String MIR_SERVER_VERSION = "3.0";
+    private static final String MIR_SERVER_VERSION = "3.0";  //支持UDP协议传流
 
-    private static final int HEART_BEAT_INTERVAL = 5; //心跳间隔30秒
+    private static final int HEART_BEAT_INTERVAL = 5; //心跳间隔5秒
     //常量定义--end---
 
-    interface DecoderListener {
-        void setStatus(String Status, PlayerDecoder decoder);
+    private ScheduledExecutorService heartBeatScheduled;
 
-        void setHW(int w, int h, int rotate, PlayerDecoder decoder);
-    }
+    private IDrawListener drawListener;
+    private IPlayerListener playerListener;
 
-
-    private DecoderListener mListener;
 
     private int mEncoderCodecType; //接受到对方的编码类型
 
-    private int mEncoderCodecSupportType;  //硬件编解码器信息
-
-    private IPlayerListener playerListener;
-
     private Context mContext;
+    private int mDecoderCodecSupportType;  //硬件编解码器信息
 
     private WebSocketServer mWebSocketServer;
     private Set<Integer> mWebSocketClients = new HashSet<>();
 
     //video socket 传输
-    private StreamChannelSink mSocketServer;
+    private TcpServer tcpServer;
     private UdpServer udpServer;
     private LinkedBlockingQueue<FrameInfo> videoList = null;
 
@@ -77,7 +80,10 @@ public class PlayerDecoder {
 
     private MediaCodec mVideoDecoder = null;
 
-    private int mWatchDogStatus = 0;
+    private int mWatchDog = 0;
+    private long mWatchTs;
+
+
     private volatile boolean isExit = false;
 
     private int mFrameWidth = 1080;
@@ -85,33 +91,46 @@ public class PlayerDecoder {
 
 
     private Surface mSurface;
-    private boolean isFirst;
-
+    private Handler mHandler;
 
     public PlayerDecoder(Context context) {
-        this(context, null);
-    }
-
-    public PlayerDecoder(Context context, Surface surface) {
         mContext = context;
-        mSurface = surface;
+
+        new Thread(new Runnable() {
+            @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+            @Override
+            public void run() {
+                checkDecoderSupportCodec();
+            }
+        }).start();
+
+        mHandler = new Handler(Looper.getMainLooper());
+        mWatchDog = 0;
 
         //控制端建立 webSocketServer 端，发送控制事件
         initWebSocketServer();
         //视频流接收方（接收方：socket server 端接收解码播放 ，socket client 端为录制编码发送方）
         initTcpServer();
 
-        initUdpServer();
+        //initUdpServer();
+
+
         Log.d("playerDecoder", "onStartCommand: PlayerDecoder init success");
     }
 
 
     private void closeSocketServer() {
         Log.d(TAG, " --- Socket Server is close --- ");
-        if (mSocketServer != null) {
-            mSocketServer.close();
-            mSocketServer = null;
+        if (tcpServer != null) {
+            tcpServer.close();
+            tcpServer = null;
         }
+
+        if (udpServer != null) {
+            udpServer.close();
+            udpServer = null;
+        }
+
 
         if (mWebSocketServer != null) {
             mWebSocketServer.close();
@@ -135,29 +154,30 @@ public class PlayerDecoder {
 
     private void ping(int socketId, String data) {
         if (mWebSocketServer != null) {
-            Log.d(TAG, "web socket server ping---" + data);
+            Log.d(TAG, "WebSocket server ping---" + data);
             mWebSocketServer.ping(socketId, data);
         }
     }
 
 
-    public void setDecoderListener(DecoderListener listener) {
-        mListener = listener;
+    public void setSurface(Surface surface) {
+        this.mSurface = surface;
     }
 
-    public void setStatusListener(IPlayerListener listener) {
+    public void setDrawListener(IDrawListener listener) {
+        drawListener = listener;
+    }
+
+    public void setPlayerListener(IPlayerListener listener) {
         playerListener = listener;
     }
 
-    public void start(Surface surface) {
+    public void startDecoder() {
         Log.d(TAG, "player decoder start...");
         videoList = new LinkedBlockingQueue<>();
         isExit = false;
-        mSurface = surface;
         videoDecoderConfigured = false;
-        isFirst = true;
 
-        checkDecoderSupportCodec();
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -182,14 +202,10 @@ public class PlayerDecoder {
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     private void setVideoData(MediaCodec.BufferInfo info, ByteBuffer encodedFrame) {
-
-        Log.e(TAG, "setVideoData:  check surface start");
         if (mSurface == null) {
             Log.e(TAG, "setVideoData: surface is null");
             return;
         }
-        Log.e(TAG, "setVideoData:  check surface success");
-
         String mimeType;  //解码器类型
         if (mEncoderCodecType == Command.CODEC_HEVC_FLAG) {
             mimeType = MediaFormat.MIMETYPE_VIDEO_HEVC; //H265
@@ -198,69 +214,16 @@ public class PlayerDecoder {
         }
 
         if ((info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {//配置数据
-
-            Log.d(TAG, "mimeType is " + mimeType + ",mFrameWidth:" + mFrameWidth + ",Height:" + mFrameHeight);
-            MediaFormat format = MediaFormat.createVideoFormat(mimeType, mFrameWidth, mFrameHeight);
-
-//            byte[] bytes = new byte[encodedFrame.remaining()];  //sps pps config no need
-//            encodedFrame.get(bytes, 0, bytes.length);
-//            if (info.size < 7) {
-//                Log.d(TAG, "BAD info");
-//                return;
-//            }
-//            encodedFrame.flip();
-//            boolean ppsFound = false;
-//            int startPos;
-//            //here we default assume the first is sps(csd-0) and the following is pps
-//            for (startPos = 3; startPos < (info.size - 5); startPos++) {
-//
-//                if ((bytes[startPos] == 0x0)
-//                        && (bytes[startPos + 1] == 0x0)
-//                        && (bytes[startPos + 2] == 0x0)
-//                        && (bytes[startPos + 3] == 0x1)
-//                        && ((bytes[startPos + 4] & 0x1f) == 0x8)
-//                ) {
-//
-//                    //if encodedFrame.get(i+4) & 0x1f is 8 , find pps
-//                    Log.d(TAG, "pps found");
-//                    ppsFound = true;
-//                    break;
-//                }
-//            }
-//            Log.d(TAG, "now b12.length " + startPos);
-//            /*temp remove to save in buffer by Huazhu Sun*/
-//            if (ppsFound) {
-//                byte[] b12 = new byte[(bytes.length - startPos)];
-//                System.arraycopy(bytes, startPos, b12, 0, b12.length);
-//
-//                ByteBuffer sps = ByteBuffer.wrap(bytes, 0, startPos);
-//                ByteBuffer pps = ByteBuffer.wrap(b12, 0, info.size - startPos);
-//
-//                format.setByteBuffer("csd-0", sps);
-//
-//                format.setByteBuffer("csd-1", pps);
-//
-//                if (BuildConfig.DEBUG) {
-//                    byte[] data = new byte[sps.remaining()];
-//                    sps.get(data);
-//                    Log.d("yao", "sps---:" + bytes2HexString(data));
-//                    sps.flip();
-//
-//
-//                    byte[] data2 = new byte[pps.remaining()];
-//                    pps.get(data2);
-//                    Log.d("yao", "pps---:" + bytes2HexString(data2));
-//                    pps.flip();
-//                }
-//
-//
-//            } else {
-//                format.setByteBuffer("csd-0", encodedFrame);
-//            }
-
             try {
-                format.setByteBuffer("csd-0", encodedFrame);
+                Log.d(TAG, "mimeType is " + mimeType + ",mFrameWidth:" + mFrameWidth + ",Height:" + mFrameHeight);
+                MediaFormat format = MediaFormat.createVideoFormat(mimeType, mFrameWidth, mFrameHeight);
                 format.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, mFrameWidth * mFrameHeight);
+
+                if (mimeType.equals(MediaFormat.MIMETYPE_VIDEO_AVC)) { //H264
+                    MediaConfig.searchSPSandPPSFromH264(encodedFrame, format);
+                } else {
+                    MediaConfig.searchVpsSpsPpsFromH265(encodedFrame, format);
+                }
 
                 if (mVideoDecoder == null) {
                     mVideoDecoder = MediaCodec.createDecoderByType(mimeType);
@@ -272,15 +235,14 @@ public class PlayerDecoder {
                 mVideoDecoder.setVideoScalingMode(MediaCodec.VIDEO_SCALING_MODE_SCALE_TO_FIT);//VIDEO_SCALING_MODE_SCALE_TO_FIT
                 mVideoDecoder.start();
                 videoDecoderConfigured = true;
+                Log.e("colin", "colin start time05 --- pad start VideoDecoder configure finish");
             } catch (Exception e) {
+                videoDecoderConfigured = false;
                 e.printStackTrace();
                 Log.e(TAG, "VideoDecoder init error" + e.toString());
+                mirServerStop(IPlayerListener.ERR_CODE_DECODER_CONFIGURE, IPlayerListener.ERR_MSG_DECODER_CONFIGURE, true);
             }
 
-            Log.d(TAG, "video decoder configured (" + info.size + " bytes)");
-
-            Log.e("colin", "colin start time05 --- pad start VideoDecoder configure finish");
-            return;
         }
 
         FrameInfo videoFrame = new FrameInfo(info, encodedFrame);
@@ -323,24 +285,20 @@ public class PlayerDecoder {
                 inputBuf[inputBufIndex].put(encodedFrames);
 
                 //解码数据添加到输入缓存中
-                mVideoDecoder.queueInputBuffer(inputBufIndex, 0, info.size, info.presentationTimeUs, 0);
+                mVideoDecoder.queueInputBuffer(inputBufIndex, info.offset, info.size, info.presentationTimeUs, info.flags);
 
                 Log.d(TAG, "end queue input buffer with ts " + info.presentationTimeUs + ",info.size :" + info.size);
-                heatBeat(info.presentationTimeUs);
+                sendDogMsg(info.presentationTimeUs);
 
                 Log.e("colin", "colin start time06 --- pad start VideoDecoder queueInputBuffer");
             } catch (Exception e) {
                 e.printStackTrace();
                 Log.e(TAG, "videoDecoderInput error---" + e.getMessage());
             }
-
-
-            if (playerListener != null & isFirst) {
-                Log.d(TAG, "doVideoDecoderFeed: player is on start");
-                playerListener.onStart();
-                isFirst = false;
-            }
         }
+
+        closeDecoder();
+
     }
 
 
@@ -351,9 +309,6 @@ public class PlayerDecoder {
         while (!videoDecoderConfigured) {
             waitTimes(10);
         }
-
-        Log.d(TAG, "videoDecoderOutput Thing enter");
-
         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
         while (!isExit) {
             try {
@@ -362,15 +317,40 @@ public class PlayerDecoder {
                     mVideoDecoder.releaseOutputBuffer(decoderIndex, true);
                     Log.e("colin", "colin start time07 --- pad start VideoDecoder dequeueOutputBuffer finish");
                 } else {
-                    Log.e(TAG, "videoDecoderOutput dequeueOutputBuffer error---" + decoderIndex);
-                    if (playerListener != null) {
-                        playerListener.onError(CODE_DECODER_ERROR, "decodedFrames error");
-                    }
+                    Log.e(TAG, "videoDecoderOutput dequeueOutputBuffer error=" + decoderIndex);
                 }
             } catch (Exception e) {
                 e.printStackTrace();
                 Log.e(TAG, "videoDecoderOutput error---" + e.getMessage());
             }
+        }
+
+        closeDecoder();
+    }
+
+
+    /**
+     * 开始心跳
+     */
+    private void startHeartBeat() {
+        if (heartBeatScheduled == null) {
+            heartBeatScheduled = Executors.newScheduledThreadPool(5);
+            heartBeatScheduled.scheduleAtFixedRate(new Runnable() {
+                public void run() {
+                    heatBeat();
+                }
+            }, HEART_BEAT_INTERVAL, HEART_BEAT_INTERVAL, TimeUnit.SECONDS);
+        }
+    }
+
+
+    /**
+     * 停止心跳
+     */
+    private void stopHeartBeat() {
+        if (heartBeatScheduled != null
+                && !heartBeatScheduled.isShutdown()) {
+            heartBeatScheduled.shutdown();
         }
     }
 
@@ -378,19 +358,31 @@ public class PlayerDecoder {
     /**
      * 心跳协议请求
      */
-    private void heatBeat(long consumeUs) {
-        if (mWatchDogStatus > 30) {
-            Log.e(TAG, "Disconnect Not Data");
-            mirServerStop(DOG_ERR);//stop
+    private void heatBeat() {
+        long ts = System.currentTimeMillis();
+
+        long delay = (ts - mWatchTs) / 1000; //最后一次心跳延时
+
+        if (mWatchDog > 3 && delay > 15) {
+            Log.e(TAG, "WebSocket server watchdog timeout..." + mWatchDog + "&" + delay);
+            mirServerStop(IPlayerListener.ERR_CODE_DOG_OUT,
+                    IPlayerListener.ERR_MSG_DOG_OUT, true);//stop
+            return;
         }
-        sendDogMsg(consumeUs);
+
+        mWatchDog++;
+        for (int clientPort : mWebSocketClients) {
+            ping(clientPort, Command.setServerHeatBeat(ts));
+        }
     }
 
 
-    private void sendDogMsg(long us) {
-        mWatchDogStatus++;
+    /**
+     * 发送解码延时信息
+     */
+    private void sendDogMsg(long consumeUs) {
         for (int clientPort : mWebSocketClients) {
-            ping(clientPort, Command.setDogData(us));
+            sendData(clientPort, Command.setDogData(consumeUs));
         }
     }
 
@@ -404,66 +396,78 @@ public class PlayerDecoder {
     }
 
 
-    public static final int DOG_ERR = 5;
-
     /**
      * 停止镜像服务
      *
      * @param errCode 错误类型
      */
-    void mirServerStop(int errCode) {
-        Log.e(TAG, "mirServerStop---" + errCode);
+    void mirServerStop(final int errCode, String errStr, boolean isCallBack) {
+
+        Log.e(TAG, "mirServerStop---" + errStr);
 
         isExit = true;  //关闭解码线程
 
+        MirManager.instance().setReverseRunning(false);
+
         for (int clientPort : mWebSocketClients) {
-            sendData(clientPort, Command.setByeData(true));
+            sendData(clientPort, Command.setByeData(true, errCode, errStr));
         }
+
+        stopHeartBeat();
 
         closeSocketServer();  //关闭 socket server
 
-        if (mVideoDecoder != null) {
-            Log.d(TAG, "unhappy decoder release");
-            mVideoDecoder.stop();
-            mVideoDecoder.release();
-            mVideoDecoder = null;
-        }
 
-        if (playerListener != null) {
-            Log.d(TAG, "mirServerStop: player is onStop");
-            playerListener.onStop();
-        }
-
-        if (mListener != null) {
-            mListener.setStatus("close", this);
+        if (playerListener != null && isCallBack) {
+            final String info = errStr;
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    playerListener.onError(errCode, info);
+                }
+            });
         }
     }
 
-    private void setUiHw() {
-        Log.d(TAG, "setUiHw");
-        if (mListener != null)
-            mListener.setHW(mFrameWidth, mFrameHeight, 0, this);
+
+    private synchronized void closeDecoder() {
+        try {
+            if (mVideoDecoder != null) {
+                Log.d(TAG, "unhappy decoder release");
+                mVideoDecoder.stop();
+                mVideoDecoder.release();
+                mVideoDecoder = null;
+            }
+            MirManager.instance().setReverseRunning(false);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
 
-    public WebSocketServer getTouch() {
-        return mWebSocketServer;
+    public void sendMotionEvent(MotionEvent motionEvent) {
+        String json = MotionEventUtil.formatTouchEvent(motionEvent, 1);
+        sendMotionEvent(json);
     }
 
-    public Set<Integer> getTouchClients() {
-        return mWebSocketClients;
+    private void sendMotionEvent(String json) {
+        Log.d(TAG, "sendMotionEvent json---:" + json);
+        for (int client : mWebSocketClients) {
+            //使用send byte[] 接口专门发送触控事件
+            mWebSocketServer.sendData(client, json.getBytes());
+        }
     }
 
 
     private void serverOnRead(int socketId, String data) {
-        Log.d(TAG, "web socket server Receive client String:" + data);
+        Log.d(TAG, "WebSocket server Receive client String:" + data);
 
         if (data.startsWith(Command.CheckVersion)) {  // first cmd
             CheckVer clientVersion = Command.getCheckVersion(data);
 
             Log.d(TAG, "Client Version:" + clientVersion); //need be back
 
-            String verCodec = Command.setServerVersionCodec(MIR_SERVER_VERSION, mEncoderCodecSupportType);
+            String verCodec = Command.setServerVersionCodec(MIR_SERVER_VERSION, mDecoderCodecSupportType);
 
             sendData(socketId, verCodec);
             Log.e("colin", "colin start time02 --- pad start PlayerDecoder check version");
@@ -475,8 +479,9 @@ public class PlayerDecoder {
                 mEncoderCodecType = ipCodec.encoderCodecType;
                 Log.d(TAG, "Encoder Codec Type:" + mEncoderCodecType);
                 //开启播放页面，创建播放surface
-                prepare(remoteIp);
                 Log.e("colin", "colin start time03 --- pad start PlayerDecoder prepare:" + remoteIp);
+
+                startDecoder();
             }
 
         } else if (data.startsWith(Command.SetWH)) {
@@ -485,14 +490,23 @@ public class PlayerDecoder {
                 //设置分辨率
                 mFrameWidth = frameWH.frameWidth;
                 mFrameHeight = frameWH.frameHeight;
-                setUiHw();
+
+                if (drawListener != null) {
+                    Log.d(TAG, "PlayerDecoder setUiHw:" + mFrameWidth + " X " + mFrameHeight);
+                    drawListener.setHW(mFrameWidth, mFrameHeight, 0, this);
+                }
+
                 Log.e("colin", "colin start time04 --- pad start PlayerDecoder setUiHw:"
                         + mFrameWidth + " X " + mFrameHeight);
             }
 
         } else if (data.startsWith(Command.Bye)) {
-            if (mContext instanceof Service) {
-                ((Service) mContext).stopSelf();
+            Log.e(TAG, "PlayerDecoder receive msg bye...");
+            Bye bye = Command.getByeData(data);
+            if (bye != null) {
+                mirServerStop(bye.errCode, bye.errMsg, true);
+            } else {
+                mirServerStop(IPlayerListener.ERR_CODE_BYE, IPlayerListener.ERR_MSG_BYE, true);
             }
         }
     }
@@ -516,27 +530,34 @@ public class PlayerDecoder {
 
             @Override
             public void ping(int socketId, String cmd) {
-                //Log.d(TAG, "web socket server receive ping--- " + cmd);
+                //Log.d(TAG, "WebSocket server receive ping--- " + cmd);
             }
 
             @Override
             public void pong(int socketId, String cmd) {
-                Log.d(TAG, "web socket server pong---" + cmd);
-                mWatchDogStatus--;
+                Log.d(TAG, "WebSocket server pong---" + cmd);
+                mWatchDog--;
+                mWatchTs = System.currentTimeMillis();
+
+                /*ServerHeartBeat data = Command.getServerHeatBeat(cmd);
+                if (data != null) {
+
+                }*/
             }
 
             @Override
             public void onConnectState(int socketId, ConnectState connectState) {
-                Log.d(TAG, "create WebSocketServer onConnectState --- " + connectState);
-                if (connectState == ConnectState.CONNECT) {
-                    mWebSocketClients.add(socketId);
 
-                    //startHeartBeat();//开始心跳
-                } else if (connectState == ConnectState.DISCONNECT) {
-                    mWebSocketClients.remove(socketId);
+                if (connectState == ConnectState.CONNECT) {
+                    Log.d(TAG, "create WebSocketServer onConnectState --- ConnectState.CONNECT");
+                    mWebSocketClients.add(socketId);
+                    startHeartBeat();
                 } else if (connectState == ConnectState.ERROR) {
-                    if (playerListener != null)
-                        playerListener.onError(CODE_SOCKET_ERROR, "get socket error");
+                    Log.d(TAG, "create WebSocketServer onConnectState --- ConnectState.ERROR");
+                    mWebSocketClients.remove(socketId);
+                } else if (connectState == ConnectState.DISCONNECT) {
+                    Log.d(TAG, "create WebSocketServer onConnectState --- ConnectState.DISCONNECT");
+                    mWebSocketClients.remove(socketId);
                 }
             }
         });
@@ -551,42 +572,56 @@ public class PlayerDecoder {
      */
     private void initTcpServer() {
         //just client send pdu to server
-        mSocketServer = new StreamChannelSink(PortKey.PORT_TCP, new StreamSinkCallback() {
-            @Override
-            public void onData(byte[] data) {
+        tcpServer = new TcpServer(PortKey.PORT_TCP, TcpServer.BUFFER_SIZE_HIGH,
+                new StreamSinkCallback() {
+                    @Override
+                    public void onData(String data, SocketChannel channel) {
 
-            }
+                    }
 
-            @Override
-            public void onData(String data) {
+                    @Override
+                    public void onData(byte[] data, SocketChannel channel) {
 
-            }
+                    }
 
-            @Override
-            public void onAudioFrame(MediaCodec.BufferInfo bufferInfo, ByteBuffer byteBuffer) {
 
-            }
+                    @Override
+                    public void onAudioFrame(MediaCodec.BufferInfo bufferInfo,
+                                             ByteBuffer byteBuffer, SocketChannel channel) {
 
-            @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-            @Override
-            public void onVideoFrame(MediaCodec.BufferInfo bufferInfo, ByteBuffer byteBuffer) {
-                Log.d(TAG, "onData: onVideoFrame bufferInfo:" + bufferInfo.size);
-                Log.d(TAG, "onData: onVideoFrame byteBuffer size:" + byteBuffer.remaining());
-                setVideoData(bufferInfo, byteBuffer);
-            }
+                    }
 
-            @Override
-            public void onConnectState(ConnectState connectState) {
-                Log.d(TAG, "create  videoSocket onConnectState --- " + connectState);
-                if (connectState != ConnectState.CONNECT) {
-                    mirServerStop(6);
-                    if (playerListener != null)
-                        playerListener.onError(CODE_SOCKET_ERROR, "get socket error");
-                }
-            }
-        });
+                    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+                    @Override
+                    public void onVideoFrame(MediaCodec.BufferInfo bufferInfo,
+                                             ByteBuffer byteBuffer, SocketChannel channel) {
+                        Log.d(TAG, "onVideoFrame bufferInfo.size=" + bufferInfo.size +
+                                "   byteBuffer size=" + byteBuffer.remaining());
+                        setVideoData(bufferInfo, byteBuffer);
+                    }
+
+                    @Override
+                    public void ping(String msg, SocketChannel channel) {
+
+                    }
+
+                    @Override
+                    public void pong(String msg, SocketChannel channel) {
+
+                    }
+
+                    @Override
+                    public void onConnectState(ConnectState connectState) {
+                        Log.d(TAG, "create  tcpServer onConnectState --- " + connectState);
+                        if (connectState == ConnectState.ERROR) {
+                            mirServerStop(IPlayerListener.ERR_CODE_SOCKET_SERVER,
+                                    IPlayerListener.ERR_MSG_SOCKET_SERVER, true);
+                        }
+                    }
+                });
+
+        tcpServer.open();
     }
-
 
     /**
      * 初始化视频数据 socketServer 端
@@ -596,93 +631,151 @@ public class PlayerDecoder {
         //just client send pdu to server
         udpServer = new UdpServer(PortKey.PORT_UDP, new StreamSinkCallback() {
             @Override
-            public void onData(byte[] data) {
+            public void onData(byte[] data, SocketChannel channel) {
 
             }
 
             @Override
-            public void onData(String data) {
+            public void onData(String data, SocketChannel channel) {
 
             }
 
             @Override
-            public void onAudioFrame(MediaCodec.BufferInfo bufferInfo, ByteBuffer byteBuffer) {
+            public void onAudioFrame(MediaCodec.BufferInfo bufferInfo,
+                                     ByteBuffer byteBuffer, SocketChannel channel) {
 
             }
 
             @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
             @Override
-            public void onVideoFrame(MediaCodec.BufferInfo bufferInfo, ByteBuffer byteBuffer) {
+            public void onVideoFrame(MediaCodec.BufferInfo bufferInfo,
+                                     ByteBuffer byteBuffer, SocketChannel channel) {
                 Log.d(TAG, "onData: onVideoFrame bufferInfo:" + bufferInfo.size);
                 Log.d(TAG, "onData: onVideoFrame byteBuffer size:" + byteBuffer.remaining());
                 setVideoData(bufferInfo, byteBuffer);
             }
 
             @Override
+            public void ping(String msg, SocketChannel channel) {
+
+            }
+
+            @Override
+            public void pong(String msg, SocketChannel channel) {
+
+            }
+
+            @Override
             public void onConnectState(ConnectState connectState) {
-                Log.d(TAG, "create  videoSocket onConnectState --- " + connectState);
-                if (connectState != ConnectState.CONNECT) {
-                    mirServerStop(6);
-                    if (playerListener != null)
-                        playerListener.onError(CODE_SOCKET_ERROR, "get socket error");
+                Log.d(TAG, "create  udpSocket onConnectState --- " + connectState);
+                if (connectState == ConnectState.ERROR) {
+                    mirServerStop(IPlayerListener.ERR_CODE_SOCKET_SERVER,
+                            IPlayerListener.ERR_MSG_SOCKET_SERVER, true);
                 }
             }
         });
         udpServer.open();
     }
 
-    private void prepare(String ip) {
-        if (DLNACommonUtil.checkPermission(mContext) || mSurface == null) {
-            Log.d(TAG, "prepare: start type with mySelf UI");
-            PlayerActivity.obtainPlayer(mContext, this, ip);
-        } else {
-            Log.d(TAG, "prepare: start type with custom UI");
-            start(mSurface);
-        }
-    }
-
-    void onDestroySurface() {
-        mirServerStop(9);
-    }
-
+    /**
+     * 检测是否支持H264 和 H265 硬解码
+     */
+    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     private void checkDecoderSupportCodec() {
+        MediaCodecConfig h264Config = new MediaCodecConfig();
+        MediaCodecConfig h265Config = new MediaCodecConfig();
+
         int numCodecs = MediaCodecList.getCodecCount();
         for (int i = 0; i < numCodecs; i++) {
             MediaCodecInfo codecInfo = MediaCodecList.getCodecInfoAt(i);
-            // 判断是否为编码器，是则直接进入下一次循环
-            if (codecInfo.isEncoder()) {
-                continue;
-            }
+            if (!codecInfo.isEncoder()) {  //解码器
+                // 如果是解码器，判断是否支持Mime类型
+                String[] types = codecInfo.getSupportedTypes();
+                for (String type : types) {
+                    if (type.equalsIgnoreCase(MediaFormat.MIMETYPE_VIDEO_AVC)) {
+                        Log.d(TAG, codecInfo.getName() + "H264 硬解码 Supported");
+                        h264Config.setSupport(true);
 
-            // 如果是解码器，判断是否支持Mime类型
-            String[] types = codecInfo.getSupportedTypes();
-            for (String type : types) {
-                if (type.equalsIgnoreCase(MediaFormat.MIMETYPE_VIDEO_AVC)) {
-                    mEncoderCodecSupportType |= Command.CODEC_AVC_FLAG;
-                    continue;
+                        MediaCodecInfo.CodecCapabilities capabilities = codecInfo.getCapabilitiesForType(type);
+                        MediaCodecInfo.VideoCapabilities videoCapabilities = capabilities.getVideoCapabilities();
+                        Range<Integer> bitrateRange = videoCapabilities.getBitrateRange();
+                        int maxBitrate = bitrateRange.getUpper();
+                        if (h264Config.getMaxBitrate() < maxBitrate) {
+                            h264Config.setMaxBitrate(maxBitrate);
+                        }
+                        Log.d(TAG, codecInfo.getName() + "H264 硬解码 maxBitrate---" + maxBitrate);
+
+                        Range<Integer> widthRange = videoCapabilities.getSupportedWidths();
+                        int maxWidth = widthRange.getUpper();
+                        if (h264Config.getMaxWidth() < maxWidth) {
+                            h264Config.setMaxWidth(maxWidth);
+                        }
+
+                        Log.d(TAG, codecInfo.getName() + "H264 硬解码 maxWidth---" + maxWidth);
+
+                        Range<Integer> heightRange = videoCapabilities.getSupportedHeights();
+                        int maxHeight = heightRange.getUpper();
+                        if (h264Config.getMaxHeight() < maxHeight) {
+                            h264Config.setMaxHeight(maxHeight);
+                        }
+
+                        Log.d(TAG, codecInfo.getName() + "H264 硬解码 maxHeight---" + maxHeight);
+
+                    } else if (type.equalsIgnoreCase(MediaFormat.MIMETYPE_VIDEO_HEVC)) {
+                        Log.d(TAG, codecInfo.getName() + "H265 硬解码 Supported");
+                        h265Config.setSupport(true);
+
+                        MediaCodecInfo.CodecCapabilities capabilities = codecInfo.getCapabilitiesForType(type);
+                        MediaCodecInfo.VideoCapabilities videoCapabilities = capabilities.getVideoCapabilities();
+                        Range<Integer> bitrateRange = videoCapabilities.getBitrateRange();
+                        int maxBitrate = bitrateRange.getUpper();
+                        if (h265Config.getMaxBitrate() < maxBitrate) {
+                            h265Config.setMaxBitrate(maxBitrate);
+                        }
+                        Log.d(TAG, codecInfo.getName() + "H265 硬解码 maxBitrate---" + maxBitrate);
+
+                        Range<Integer> widthRange = videoCapabilities.getSupportedWidths();
+                        int maxWidth = widthRange.getUpper();
+                        if (h265Config.getMaxWidth() < maxWidth) {
+                            h265Config.setMaxWidth(maxWidth);
+                        }
+                        Log.d(TAG, codecInfo.getName() + "H265 硬解码 maxWidth---" + maxWidth);
+
+                        Range<Integer> heightRange = videoCapabilities.getSupportedHeights();
+                        int maxHeight = heightRange.getUpper();
+                        if (h265Config.getMaxHeight() < maxHeight) {
+                            h265Config.setMaxHeight(maxHeight);
+                        }
+                        Log.d(TAG, codecInfo.getName() + "H265 硬解码 maxHeight---" + maxHeight);
+                    }
                 }
-                if (type.equalsIgnoreCase(MediaFormat.MIMETYPE_VIDEO_HEVC)) {
-                    mEncoderCodecSupportType |= Command.CODEC_HEVC_FLAG;
-                }
+
             }
         }
-    }
-
-
-    public static String bytes2HexString(byte[] b) {
-        StringBuilder sb = new StringBuilder();
-        int length = b.length;
-        for (int i = 0; i < length; i++) {
-            String hex = Integer.toHexString(b[i] & 0xFF);
-            if (hex.length() == 1) {
-                hex = '0' + hex;
-            }
-            sb.append("0x").append(hex.toUpperCase());
-            if (i < length - 1) {
-                sb.append(',');
-            }
+        Log.d(TAG, "h264Config 硬解码---" + h264Config.toString());
+        Log.d(TAG, "h265Config 硬解码---" + h265Config.toString());
+        Configuration configuration = mContext.getResources().getConfiguration(); //获取设置的配置信息
+        int ori = configuration.orientation; //获取屏幕方向
+        int width, height;
+        if (DLNACommonUtil.checkPermission(mContext)) {//for tv
+            width = 1920;
+            height = 1080;
+        } else if (ori == Configuration.ORIENTATION_LANDSCAPE) {  ///横屏 for pad
+            width = 1920;
+            height = 1080;
+        } else {  //竖屏 for mobile
+            width = 1080;
+            height = 1920;
         }
-        return sb.toString();
+        if (width <= h264Config.getMaxWidth()
+                && height <= h264Config.getMaxHeight()) {
+            mDecoderCodecSupportType |= Command.CODEC_AVC_FLAG;  //支持h264
+        }
+        if (width <= h265Config.getMaxWidth()
+                && height <= h265Config.getMaxHeight()) {
+            mDecoderCodecSupportType |= Command.CODEC_HEVC_FLAG; //支持h265
+        }
+        Log.d(TAG, "h264 || h265 decoder---" + "mDecoderCodecSupportType:" + mDecoderCodecSupportType);
     }
 
 }

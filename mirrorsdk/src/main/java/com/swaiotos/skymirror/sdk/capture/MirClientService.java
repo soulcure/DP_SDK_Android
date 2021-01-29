@@ -24,34 +24,33 @@ package com.swaiotos.skymirror.sdk.capture;
 
 import android.annotation.TargetApi;
 import android.app.Instrumentation;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
-import android.hardware.display.DisplayManager;
-import android.hardware.display.VirtualDisplay;
+import android.content.res.Configuration;
 import android.media.MediaCodec;
-import android.media.MediaCodecInfo;
-import android.media.MediaCodecList;
 import android.media.MediaFormat;
-import android.media.projection.MediaProjection;
-import android.media.projection.MediaProjectionManager;
 import android.os.Build;
-import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.SystemClock;
-import android.util.DisplayMetrics;
 import android.util.Log;
-import android.view.Display;
 import android.view.MotionEvent;
-import android.view.Surface;
-import android.view.WindowManager;
 
 import androidx.annotation.RequiresApi;
 
 import com.google.gson.Gson;
-import com.skyworth.dpclientsdk.PduUtil;
+import com.skyworth.dpclientsdk.ConnectState;
+import com.skyworth.dpclientsdk.PduBase;
+import com.skyworth.dpclientsdk.ResponseCallback;
 import com.skyworth.dpclientsdk.StreamSourceCallback;
+import com.skyworth.dpclientsdk.TcpClient;
 import com.skyworth.dpclientsdk.UdpClient;
+import com.skyworth.dpclientsdk.WebSocketClient;
 import com.swaiotos.skymirror.sdk.Command.Command;
 import com.swaiotos.skymirror.sdk.Command.DecoderStatus;
 import com.swaiotos.skymirror.sdk.Command.Dog;
@@ -59,13 +58,9 @@ import com.swaiotos.skymirror.sdk.Command.SendData;
 import com.swaiotos.skymirror.sdk.Command.ServerVersionCodec;
 import com.swaiotos.skymirror.sdk.data.PortKey;
 import com.swaiotos.skymirror.sdk.data.TouchData;
+import com.swaiotos.skymirror.sdk.reverse.IPlayerListener;
 import com.swaiotos.skymirror.sdk.reverse.MotionEventUtil;
-import com.swaiotos.skymirror.sdk.util.DLNACommonUtil;
-import com.swaiotos.skymirror.sdk.util.NetUtils;
-import com.skyworth.dpclientsdk.WebSocketClient;
-import com.skyworth.dpclientsdk.ConnectState;
-import com.skyworth.dpclientsdk.ResponseCallback;
-import com.skyworth.dpclientsdk.StreamChannelSource;
+import com.swaiotos.skymirror.sdk.util.DeviceUtil;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -73,6 +68,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * @ClassName: MirClientService
@@ -80,76 +76,111 @@ import java.util.concurrent.TimeUnit;
  * @Author: lfz
  * @Date: 2020/4/15 9:38
  */
-public abstract class MirClientService extends Service {
-
-
+public class MirClientService extends Service {
     //常量定义--start---
     private static final String TAG = MirClientService.class.getSimpleName();
-
-    private static final String MIR_CLIENT_VERSION = "3.0";
-
-    private static final int MIN_BITRATE_THRESHOLD = 4 * 1024 * 1024;
-    private static final int DEFAULT_BITRATE = 6 * 1024 * 1024;
-    private static final int MAX_BITRATE_THRESHOLD = 8 * 1024 * 1024;
-
-    private static final int MAX_VIDEO_FPS = 60;
-
-
+    private static final String MIR_CLIENT_VERSION = "3.0";  //支持UDP协议传流
     private static final int HEART_BEAT_INTERVAL = 5; //心跳间隔30秒
     //常量定义--end---
-
+    private Context mContext;
     private ScheduledExecutorService heartBeatScheduled;
 
-
-    private MediaCodec encoder = null;
-
-    private VirtualDisplay virtualDisplay = null;
+    private Thread inputWorkerTouch;
+    private Thread encoderWorker;
 
     private boolean isExit;
+    private boolean isExitTouch;
 
     private int mWatchDog = 0;
-
-    public int mScreenDisplayWidth;
-    public int mScreenDisplayHeight;
-
-    public int mWidth;
-    public int mHeight;
-
-
-    private int mBitrate = DEFAULT_BITRATE;
+    private long mWatchTs;
     private long consumedUs;
 
-    private String mimeType;   //编码器类型
+    private WebSocketClient mWebSocketClient;  //web socket client
+    private TcpClient tcpClient; //data socket client
+    private UdpClient udpClient;
 
-
-    private MediaCodec.BufferInfo mBufferInfo;
-
-    private int mEncoderCodecSupportType;  //硬件编解码器信息
-
-
-    private WebSocketClient mWebSocketClient;
+    boolean isUdpSupport = false;  //是否支持UDP协议传流
 
     private LinkedBlockingQueue<MotionEvent> touchEventQueue;
 
-    private StreamChannelSource mVideoDataClient;
-    private UdpClient udpClient;
+    private Handler mHandler;
+    private long timeoutUs = 1000 * 1000;  //单位微秒 1秒
 
+    private PlayerEncoder playerEncoder;
 
-    private MediaProjection mediaProjection;
-
-
-    private StreamSourceCallback mStreamSourceCallback = new StreamSourceCallback() {
+    private StreamSourceCallback mTcpCallback = new StreamSourceCallback() {
         @Override
         public void onConnectState(ConnectState state) {
-            Log.d(TAG, "web socket client onConnectState: --- " + state);
-            if (state == ConnectState.ERROR) {
-                stopSelf();
+            if (state == ConnectState.CONNECT) {
+                Log.i(TAG, "tcpClient onConnectState: --- CONNECT");
+            } else if (state == ConnectState.DISCONNECT) {
+                Log.e(TAG, "tcpClient onConnectState: --- DISCONNECT");
+            } else if (state == ConnectState.ERROR) {
+                Log.e(TAG, "tcpClient onConnectState: --- ERROR");
+                if (playerEncoder != null)
+                    playerEncoder.setReset(false);
+                stopMirService(IPlayerListener.ERR_CODE_SOCKET_CLIENT, IPlayerListener.ERR_MSG_SOCKET_CLIENT);
             }
+        }
+
+        @Override
+        public void onData(String data) {
+
+        }
+
+        @Override
+        public void onData(byte[] data) {
+
+        }
+
+        @Override
+        public void ping(String msg) {
+
+        }
+
+        @Override
+        public void pong(String msg) {
+
         }
     };
 
 
-    private ResponseCallback mResponseCallback = new ResponseCallback() {
+    private StreamSourceCallback mUdpCallback = new StreamSourceCallback() {
+        @Override
+        public void onConnectState(ConnectState state) {
+            if (state == ConnectState.CONNECT) {
+                Log.i(TAG, "udpClient onConnectState: --- CONNECT");
+            } else if (state == ConnectState.DISCONNECT) {
+                Log.e(TAG, "udpClient onConnectState: --- DISCONNECT");
+            } else if (state == ConnectState.ERROR) {
+                Log.e(TAG, "udpClient onConnectState: --- ERROR");
+                //stopMirService(IPlayerListener.ERR_CODE_SOCKET_CLIENT, IPlayerListener.ERR_MSG_SOCKET_CLIENT);
+            }
+        }
+
+        @Override
+        public void onData(String data) {
+
+        }
+
+        @Override
+        public void onData(byte[] data) {
+
+        }
+
+        @Override
+        public void ping(String msg) {
+
+        }
+
+        @Override
+        public void pong(String msg) {
+
+        }
+    };
+
+
+    private ResponseCallback mWebSocketCallback = new ResponseCallback() {
         @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
         @Override
         public void onCommand(String s) {
@@ -174,52 +205,92 @@ public abstract class MirClientService extends Service {
 
         @Override
         public void ping(String cmd) {
-            Dog dog = Command.getDogData(cmd);
-            if (dog != null) {
-                consumedUs = dog.dog;
-            }
+            //Log.d(TAG, "WebSocket client receive ping--- " + cmd);
         }
 
         @Override
         public void pong(String cmd) {
-            Log.d(TAG, "web socket client pong---" + cmd);
+            Log.d(TAG, "WebSocket client pong---" + cmd + " mWatchDog:" + mWatchDog);
             mWatchDog--;
+            mWatchTs = System.currentTimeMillis();
         }
 
 
         @Override
         public void onConnectState(ConnectState connectState) {
-            Log.e(TAG, "web socket client onConnectState -----" + connectState);
             if (connectState == ConnectState.CONNECT) {
-                sendMsg(Command.setCheckVersion(MIR_CLIENT_VERSION));
-                touchEventQueue.clear();
-                new Thread(new InputWorkerTouch(), "Input Thread Touch").start();//bsp
-
+                Log.i(TAG, "WebSocket client onConnectState ----- CONNECT");
                 startHeartBeat();    //开启心跳
-            } else { // ConnectState.ERROR ,ConnectState.DISCONNECT
-                stopSelf();
+
+                //first cmd by WebSocket Client connect success
+                sendMsg(Command.setCheckVersion(MIR_CLIENT_VERSION)); //WebSocket Client 连接成功后，首次信令消息
+                touchEventQueue.clear();
+
+                if (inputWorkerTouch == null) {
+                    inputWorkerTouch = new Thread(new InputWorkerTouch(), "Input Thread Touch");
+                }
+                if (!inputWorkerTouch.isAlive()) {
+                    inputWorkerTouch.start();//bsp
+                }
+            } else if (connectState == ConnectState.DISCONNECT) { // ConnectState.ERROR ,ConnectState.DISCONNECT
+                Log.e(TAG, "WebSocket client onConnectState ----- DISCONNECT");
+            } else if (connectState == ConnectState.ERROR) { // ConnectState.ERROR ,ConnectState.DISCONNECT
+                Log.e(TAG, "WebSocket client onConnectState ----- ERROR");
+                stopMirService(IPlayerListener.ERR_CODE_WEB_SOCKET_CLIENT,
+                        IPlayerListener.ERR_MSG_WEB_SOCKET_CLIENT);
             }
         }
     };
 
-
-    /**
-     * 子类实现的抽象方法
-     */
-    protected abstract void initNotification();
 
     @Override
     public IBinder onBind(Intent intent) {
         return null;
     }
 
+    private void createNotification() {
+        String channelId = "CHANNEL_ONE_ID";
+        String channelName = "MirClientService";
+
+        NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                    channelId,
+                    channelName,
+                    NotificationManager.IMPORTANCE_DEFAULT);
+            notificationManager.createNotificationChannel(channel);
+            startForeground(1024, new Notification.Builder(this, channelId).build());
+        } else {
+            startForeground(1024, new Notification());
+        }
+
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
+
+        new Thread(new Runnable() {
+            @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+            @Override
+            public void run() {
+                if (playerEncoder == null)
+                    playerEncoder = new PlayerEncoder(getApplicationContext());
+                playerEncoder.checkEncoderSupportCodec();
+            }
+        }).start();
+
         Log.d(TAG, "MirClientService onCreate");
+
         isExit = false;
+        isExitTouch = false;
         touchEventQueue = new LinkedBlockingQueue<>();
-        mBufferInfo = new MediaCodec.BufferInfo();
+        mContext = this;
+        mHandler = new Handler(Looper.getMainLooper());
+
+        mWatchDog = 0;
+        createNotification();
+        CustomToast.instance().clear();
     }
 
     /**
@@ -233,70 +304,38 @@ public abstract class MirClientService extends Service {
         Log.d(TAG, "MirClientService onStartCommand---" + action);
 
         if (action != null && action.equals("START")) {
-            initNotification();
             String ip = intent.getStringExtra("serverip");
             int resultCode = intent.getIntExtra("resultCode", -10);
             Intent data = intent.getParcelableExtra("intent");
 
-            initMediaProjection(resultCode, data);
-
-            DisplayMetrics dm = new DisplayMetrics();
-            Display mDisplay = ((WindowManager) getSystemService(Context.WINDOW_SERVICE))
-                    .getDefaultDisplay();
-            mDisplay.getMetrics(dm);
-            int deviceWidth = dm.widthPixels;
-            int deviceHeight = dm.heightPixels;
-
-            Log.d(TAG, "deviceWidth:" + deviceWidth + ",deviceHeight:" + deviceHeight);
-
-            if (!DLNACommonUtil.checkPermission(this)) {
-                if (deviceWidth > 1080) {
-                    float desWH = 1080f / deviceWidth;
-                    int baseHeight = (int) (deviceHeight * desWH);
-                    mWidth = (int) (deviceWidth * desWH);
-                    mHeight = baseHeight - (baseHeight % 16);
-                } else if (deviceHeight > 1920) {
-                    float desWH = 1920F / deviceHeight;
-                    int baseWidth = (int) (deviceWidth * desWH);
-                    mWidth = baseWidth - (baseWidth % 16);
-                    mHeight = (int) (deviceHeight * desWH);
-                } else {
-                    mWidth = deviceWidth;
-                    mHeight = deviceHeight;
-                }
-            } else {
-                mWidth = deviceWidth;
-                mHeight = deviceHeight;
-            }
-
-            Log.e(TAG, "onStartCommand: " + mWidth + " --- " + mHeight);
-            Log.d(TAG, "mScreenDisplayWidth:" + mScreenDisplayWidth + ",mScreenDisplayHeight:" + mScreenDisplayHeight);
-
-            checkEncoderSupportCodec();
-
             Log.d(TAG, "onStartCommand: client(PHONE) ip ----- " + ip);
-            Log.d(TAG, "onStartCommand: server(TV) ip ----- " + NetUtils.getIP(this));
+            Log.d(TAG, "onStartCommand: server(TV) ip ----- " + DeviceUtil.getLocalIPAddress(this));
 
-            mWebSocketClient = new WebSocketClient(ip, PortKey.PORT_WEB_SOCKET, mResponseCallback);
+//            initMediaProjection(resultCode, data);
+            if (playerEncoder == null)
+                playerEncoder = new PlayerEncoder(getApplicationContext());
+            playerEncoder.createMediaProjection(resultCode, data);
+
+            mWebSocketClient = new WebSocketClient(ip, PortKey.PORT_WEB_SOCKET, mWebSocketCallback);
             mWebSocketClient.open();
 
-            udpClient = new UdpClient(ip, PortKey.PORT_UDP, mStreamSourceCallback);
-            udpClient.open();
+            //udpClient = new UdpClient(ip, PortKey.PORT_UDP, mUdpCallback);
+            //udpClient.open();
 
-            mVideoDataClient = new StreamChannelSource(ip, PortKey.PORT_TCP, mStreamSourceCallback);
+            tcpClient = new TcpClient(ip, PortKey.PORT_TCP, mTcpCallback);
+            tcpClient.open();
 
         } else if (action != null && action.equals("STOP")) {
             Log.d(TAG, "onStartCommand: stop flag");
-            stopSelf();
+            stopMirService(IPlayerListener.ERR_CODE_MIR_CLOSE, IPlayerListener.ERR_MSG_MIR_CLOSE);
         }
 
         return START_NOT_STICKY;
     }
 
     public void ping(String msg) {
-        mWatchDog++;
         if (mWebSocketClient != null) {
-            Log.d(TAG, "web socket client ping---" + msg);
+            Log.d(TAG, "WebSocket client ping---" + msg + " mWatchDog:" + mWatchDog);
             mWebSocketClient.ping(msg);
         }
     }
@@ -308,75 +347,69 @@ public abstract class MirClientService extends Service {
         }
     }
 
-
-    //check解码器
-    private void checkEncoderSupportCodec() {
-        //获取所有编解码器个数
-        int numCodecs = MediaCodecList.getCodecCount();
-        for (int i = 0; i < numCodecs; i++) {
-            //获取所有支持的编解码器信息
-            MediaCodecInfo codecInfo = MediaCodecList.getCodecInfoAt(i);
-            // 判断是否为编码器，否则直接进入下一次循环
-            if (!codecInfo.isEncoder()) {
-                continue;
-            }
-            // 如果是解码器，判断是否支持Mime类型
-            String[] types = codecInfo.getSupportedTypes();
-            for (String type : types) {
-                if (type.equalsIgnoreCase(MediaFormat.MIMETYPE_VIDEO_AVC)) {
-                    mEncoderCodecSupportType |= Command.CODEC_AVC_FLAG;
-                    Log.d(TAG, "AVC Supported");
-                    continue;
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    //resetWH ->reset -> reconfigure -> start
+                    if (playerEncoder != null) {
+                        isExit = true;
+                        playerEncoder.checkEncodeWH();
+                        playerEncoder.reset();
+                        playerEncoder.reConfigure();
+                        playerEncoder.start();
+                        String hw = Command.setFrameWH(true, playerEncoder.getWidth(), playerEncoder.getHeight());
+                        sendMsg(hw);
+                        isExit = false;
+                        while (!isExit) {
+                            doEncodeWork();
+                        }
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    Log.e(TAG, "encoder stop---" + e.getMessage());
                 }
-
-                if (type.equalsIgnoreCase(MediaFormat.MIMETYPE_VIDEO_HEVC)) {
-                    mEncoderCodecSupportType |= Command.CODEC_HEVC_FLAG;
-                    Log.d(TAG, "HEVC Supported");
-                }
             }
-        }
-        Log.d(TAG, "encoderCodecSupportType " + mEncoderCodecSupportType);
+        }).start();
     }
-
-
-    private void initMediaProjection(int resultCode, Intent data) {
-        if (resultCode == -10 || data == null)
-            return;
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            MediaProjectionManager mediaProjectionManager = (MediaProjectionManager)
-                    getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-            if (mediaProjection == null) {
-                mediaProjection = mediaProjectionManager.getMediaProjection(
-                        resultCode, data);
-            }
-        }
-    }
-
 
     //clint onRead
+    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     private void clientOnRead(String s) {
         if (s.startsWith(Command.ServerVersion)) {   // first cmd
             ServerVersionCodec versionCodec = Command.getServerVersionCodec(s);
 
             if (versionCodec.serverVersion.compareTo(MIR_CLIENT_VERSION) >= 0) {
                 Log.d(TAG, "ServerVersion fitted with " + MIR_CLIENT_VERSION);
+                isUdpSupport = true;
+            } else {
+                isUdpSupport = false;
             }
+
+            if (playerEncoder.getEncoderCodecSupportType() == 0) {  //自己不支持硬编码
+                stopMirService(IPlayerListener.ERR_CODE_ENCODER_NOT_SUPPORTED,
+                        IPlayerListener.ERR_MSG_ENCODER_NOT_SUPPORTED);
+                return;
+            }
+
             int codeSupport = versionCodec.codecSupport; //对方的编码类型
-            int encoderCodecType; //自己的编码类型
+            int encoderCodecType = Command.CODEC_AVC_FLAG;//自己的编码类型
+            String mimeType = MediaFormat.MIMETYPE_VIDEO_AVC;  //H264
             //高分辨率手机使用h265
             if (((codeSupport & Command.CODEC_HEVC_FLAG) == Command.CODEC_HEVC_FLAG)  //对方支持H265
-                    && ((mEncoderCodecSupportType & Command.CODEC_HEVC_FLAG) == Command.CODEC_HEVC_FLAG)) { //自己支持H265
+                    && ((playerEncoder.getEncoderCodecSupportType() & Command.CODEC_HEVC_FLAG) == Command.CODEC_HEVC_FLAG)) { //自己支持H265
                 mimeType = MediaFormat.MIMETYPE_VIDEO_HEVC;  //H265
                 encoderCodecType = Command.CODEC_HEVC_FLAG;
-            } else {
-                mimeType = MediaFormat.MIMETYPE_VIDEO_AVC;  //H264
-                encoderCodecType = Command.CODEC_AVC_FLAG;
             }
 
             Log.d(TAG, "CodecSupport is remote---" + codeSupport + "  ---self---" + encoderCodecType);
 
-            String localIp = NetUtils.getIP(MirClientService.this);
+            playerEncoder.setContentMimeType(mimeType);
+
+            String localIp = DeviceUtil.getLocalIPAddress(MirClientService.this);
 
             Log.d(TAG, "onCommand: getLocalIp ---- " + localIp);
 
@@ -388,147 +421,106 @@ public abstract class MirClientService extends Service {
         } else if (s.startsWith(Command.DecoderStatus)) {  //second cmd
             DecoderStatus status = Command.getDecoderStatus(s);
             if (status.decoderStatus) {
+                int waitTime = 10;
+                while ((playerEncoder.getWidth() == 0 || playerEncoder.getHeight() == 0) && waitTime != 0) {
+                    waitTime--;
+                    try {
+                        Log.e(TAG, "MirClientService mWidth or mHeight is 0----" + waitTime);
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                if (playerEncoder.getWidth() == 0 || playerEncoder.getHeight() == 0) {
+                    Log.e(TAG, "MirClientService mWidth or mHeight is 0");
+                    stopMirService(IPlayerListener.ERR_CODE_VIRTUAL_DISPLAY,
+                            IPlayerListener.ERR_MSG_VIRTUAL_DISPLAY);
+                    return;
+                }
                 // 处理屏幕旋转，通知解码端分辨率，动态设置，如果屏幕旋转，需要重新设置
-                String hw = Command.setFrameWH(true, mWidth, mHeight);
+                String hw = Command.setFrameWH(true, playerEncoder.getWidth(), playerEncoder.getHeight());
                 sendMsg(hw);
+
                 Log.e("colin", "colin start time03 --- tv check DecoderStatus and set hw");
             }
         } else if (s.startsWith(Command.SendData)) { //third cmd
             SendData data = Command.getSendData(s);
             if (data.sendData) {
                 Log.d(TAG, "start Encode....");
-                new Thread(new EncoderWorker(), "Encoder Thread").start();
+                if (encoderWorker == null) {
+                    encoderWorker = new Thread(new EncoderWorker(), "Encoder Thread");
+                }
+                if (!encoderWorker.isAlive()) {
+                    encoderWorker.start();
+                }
+
+                MirManager.instance().setMirRunning(true);
                 Log.e("colin", "colin start time04 --- tv start Encoder and SendData");
             }
+        } else if (s.startsWith(Command.Dog)) { //播放时延信息
+            Dog dog = Command.getDogData(s);
+            if (dog != null) {
+                consumedUs = dog.dog;
+            }
         } else if (s.startsWith(Command.Bye)) { //exit cmd
-            stopSelf();
+            Log.e(TAG, "MirClientService receive msg bye...");
+            stopMirService(IPlayerListener.ERR_CODE_BYE, IPlayerListener.ERR_MSG_BYE);
         }
     }
-
-
-    private void adjustBitRate(MediaCodec.BufferInfo info) {
-        long ts = (info.presentationTimeUs - consumedUs) / 1000;  //纳秒转换为毫秒
-        Log.d(TAG, "adjustBitRate ts---" + ts);
-
-        int bitrate;
-        if (ts > 300) { //延时大于300ms
-            bitrate = MIN_BITRATE_THRESHOLD;
-        } else if (ts < 100) { //延时小于100ms
-            bitrate = MAX_BITRATE_THRESHOLD;
-        } else {
-            bitrate = DEFAULT_BITRATE;
-        }
-
-        if (bitrate == mBitrate) {
-            Log.d(TAG, "adjustBitRate no need");
-            return;
-        }
-
-        Log.d(TAG, "adjustBitRate increase bit rate---" + bitrate);
-        Bundle param = new Bundle();
-        param.putInt(MediaCodec.PARAMETER_KEY_VIDEO_BITRATE, bitrate);
-        encoder.setParameters(param);
-        mBitrate = bitrate;
-    }
-
 
     private void doEncodeWork() {
         try {
-            int index = encoder.dequeueOutputBuffer(mBufferInfo, -1);
-            if (index >= 0) {
-                adjustBitRate(mBufferInfo);
-                ByteBuffer encodeData;
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
-                    ByteBuffer[] byteBuffers = encoder.getOutputBuffers();
-                    encodeData = byteBuffers[index];
-                } else {
-                    encodeData = encoder.getOutputBuffer(index);
-                }
+            int index = playerEncoder.dequeueOutputBuffer(timeoutUs);
+            if (index == MediaCodec.INFO_TRY_AGAIN_LATER) { //无推流数据
+                Log.e(TAG, "MediaCodec INFO_TRY_AGAIN_LATER---");
+                CustomToast.instance().popUp(mContext);
+                timeoutUs = -1;  //第二次设为阻塞试，无限等待
 
+            } else if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                Log.e(TAG, "MediaCodec INFO_OUTPUT_FORMAT_CHANGED---");
+            } else if (index == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
+                Log.e(TAG, "MediaCodec INFO_OUTPUT_BUFFERS_CHANGED---");
+            } else if (index >= 0) {
+                //实时适配
+                playerEncoder.adjustBitRate(consumedUs);
+                //获取数据
+                ByteBuffer encodeData = playerEncoder.getOutputBuffers(index);
+                MediaCodec.BufferInfo mBufferInfo = playerEncoder.getBufferInfo();
 
-                if (encodeData != null
+                Log.e("colin", "colin start isUdpSupport---" + isUdpSupport);
+                if (isUdpSupport
+                        && encodeData != null
                         && udpClient != null
                         && udpClient.isOpen()
+                        && mBufferInfo != null
                         && mBufferInfo.size != 0) {
-                    udpClient.sendData(PduUtil.PDU_VIDEO, mBufferInfo, encodeData);
+                    udpClient.sendData(PduBase.VIDEO_FRAME, playerEncoder.getBufferInfo(), encodeData);
                     Log.e("colin", "colin start time05 --- tv start Encoder finish will send by udp socket");
                 } else if (encodeData != null
-                        && mVideoDataClient != null
-                        && mVideoDataClient.isOpen()
+                        && tcpClient != null
+                        && tcpClient.isOpen()
+                        && mBufferInfo != null
                         && mBufferInfo.size != 0) {
-                    mVideoDataClient.sendData(StreamChannelSource.PduType.VideoFrame, mBufferInfo, encodeData);
+                    tcpClient.sendData(PduBase.VIDEO_FRAME, mBufferInfo, encodeData);
                     Log.e("colin", "colin start time05 --- tv start Encoder finish will send by tcp socket");
                 }
-
-
-                encoder.releaseOutputBuffer(index, false);
+                //释放
+                playerEncoder.releaseOutputBuffer(index, false);
             }
         } catch (Exception e) {
+            Log.e(TAG, "doEncodeWork error---" + playerEncoder.isReset());
+            if (playerEncoder != null && playerEncoder.isReset() || isExit) {
+                playerEncoder.setReset(false);
+                return;
+            }
             e.printStackTrace();
             Log.e(TAG, "doEncodeWork error---" + e.getMessage());
+            stopMirService(IPlayerListener.ERR_CODE_VIRTUAL_DISPLAY,
+                    IPlayerListener.ERR_MSG_VIRTUAL_DISPLAY);
+
         }
     }
-
-
-    @TargetApi(19)
-    private Surface createDisplaySurface() throws IOException {
-        MediaFormat mediaFormat = MediaFormat.createVideoFormat(mimeType, mWidth, mHeight);
-        mediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, mBitrate); //设置比特率
-
-        mediaFormat.setInteger(MediaFormat.KEY_FRAME_RATE, MAX_VIDEO_FPS);
-        mediaFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT,
-                MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-        mediaFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 10);
-        encoder = MediaCodec.createEncoderByType(mimeType);
-        encoder.configure(mediaFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-
-        Log.i(TAG, "createDisplaySurface: " + mWidth + " ----- " + mHeight + "--- "
-                + mimeType + " --- " + mBitrate);
-
-        return encoder.createInputSurface();
-    }
-
-
-    @androidx.annotation.RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-    public void startDisplayManager() {
-        try {
-            Surface encoderInputSurface = createDisplaySurface();//系统Size
-
-            if (DLNACommonUtil.checkPermission(this)) { //for tv
-                Log.d(TAG, "startDisplayManager: create virtualDisplay by DisplayManager");
-                DisplayManager displayManager = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
-                virtualDisplay = displayManager.createVirtualDisplay(
-                        "TV Screen Mirror", mWidth, mHeight,
-                        50,
-                        encoderInputSurface,
-                        DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC
-                                | DisplayManager.VIRTUAL_DISPLAY_FLAG_SECURE);
-            } else if (mediaProjection != null) { //for mobile
-                Log.d(TAG, "startDisplayManager: create virtualDisplay by mediaProjection");
-                virtualDisplay = mediaProjection
-                        .createVirtualDisplay(
-                                "TV Screen Mirror", mWidth, mHeight,
-                                50,
-                                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                                encoderInputSurface,
-                                null, null);// bsp
-            }
-            encoder.start();
-        } catch (Exception e) {
-            e.printStackTrace();
-            Log.d(TAG, "startDisplayManager: create virtualDisplay error");
-            stopSelf();
-        }
-    }
-
-    private void mySleep(long ms) {
-        try {
-            Thread.sleep(ms);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-    }
-
 
     /**
      * 开始心跳
@@ -544,7 +536,6 @@ public abstract class MirClientService extends Service {
         }
     }
 
-
     /**
      * 停止心跳
      */
@@ -555,62 +546,68 @@ public abstract class MirClientService extends Service {
         }
     }
 
-
     /**
      * 心跳协议请求
      */
     private void heatBeat() {
-        if (mWatchDog > 3) {
-            Log.e(TAG, "fetch watchdog timeout");
-            stopSelf();
+        long ts = System.currentTimeMillis();
+        long delay = (ts - mWatchTs) / 1000; //最后一次心跳延时
+
+        if (mWatchDog > 3 && delay > 15) {
+            Log.e(TAG, "WebSocket client watchdog timeout..." + mWatchDog + "&" + delay);
+            stopMirService(IPlayerListener.ERR_CODE_WATCHDOG, IPlayerListener.ERR_MSG_WATCHDOG);
+            return;
         }
-        ping(Command.setLiveData(System.currentTimeMillis()));
+        mWatchDog++;
+        Log.d(TAG, "--heatBeat----:" + mWatchDog);
+        ping(Command.setClientData(ts));
     }
 
 
     private class InputWorkerTouch implements Runnable {
         @Override
         public void run() {
-            Log.d(TAG, "InputWorkerTouch enter");
-            while (!isExit) {
-                MotionEvent motionEvent = touchEventQueue.poll();
-                if (motionEvent == null) {
-                    mySleep(10);
-                    continue;
-                }
-
-                Log.d(TAG, "run: 111111111111111111111111111111111111111111111111111111111111");
-
-                long downtime = SystemClock.uptimeMillis();
-                long eventTime = SystemClock.uptimeMillis();
-                int count = motionEvent.getPointerCount();
-                int action = motionEvent.getAction();
-                MotionEvent.PointerProperties props[] = new MotionEvent.PointerProperties[count];
-                MotionEvent.PointerCoords coords[] = new MotionEvent.PointerCoords[count];
-                //int meta = motionEvent.getMetaState();
-                //int bstat = motionEvent.getButtonState();
-                //float xprec = motionEvent.getXPrecision();
-                //float yprec = motionEvent.getYPrecision();
-                //int edgef = motionEvent.getEdgeFlags();
-                //int flag = motionEvent.getFlags();
-
-                for (int i = 0; i < count; i++) {
-                    props[i] = new MotionEvent.PointerProperties();
-                    motionEvent.getPointerProperties(i, props[i]);
-                }
-                for (int i = 0; i < count; i++) {
-                    coords[i] = new MotionEvent.PointerCoords();
-                    motionEvent.getPointerCoords(i, coords[i]);
-                }
-
-                MotionEvent motionEvent2 = MotionEvent.obtain(downtime, eventTime, action, count, props, coords, 0, 0, 0, 0, 0, 0, 0, 0);
-
-                Log.d(TAG, "touch obtain:" + motionEvent2.toString());
-
+            Log.d(TAG, "InputWorkerTouch enter----");
+            while (!isExitTouch) {
                 try {
-                    Instrumentation mInst = new Instrumentation();
-                    mInst.sendPointerSync(motionEvent2);
+                    MotionEvent motionEvent = touchEventQueue.take();
+
+                    long downtime = SystemClock.uptimeMillis();
+                    long eventTime = SystemClock.uptimeMillis();
+                    int count = motionEvent.getPointerCount();
+                    int action = motionEvent.getAction();
+                    MotionEvent.PointerProperties[] pointerProperties = new MotionEvent.PointerProperties[count];
+                    MotionEvent.PointerCoords[] pointerCoords = new MotionEvent.PointerCoords[count];
+                    //int meta = motionEvent.getMetaState();
+                    //int bstat = motionEvent.getButtonState();
+                    //float xprec = motionEvent.getXPrecision();
+                    //float yprec = motionEvent.getYPrecision();
+                    //int edgef = motionEvent.getEdgeFlags();
+                    //int flag = motionEvent.getFlags();
+
+                    for (int i = 0; i < count; i++) {
+                        pointerProperties[i] = new MotionEvent.PointerProperties();
+                        motionEvent.getPointerProperties(i, pointerProperties[i]);
+                    }
+                    for (int i = 0; i < count; i++) {
+                        pointerCoords[i] = new MotionEvent.PointerCoords();
+                        motionEvent.getPointerCoords(i, pointerCoords[i]);
+                    }
+
+                    MotionEvent met = MotionEvent.obtain(downtime, eventTime, action, count,
+                            pointerProperties, pointerCoords, 0, 0,
+                            0, 0, 0, 0, 0, 0);
+
+                    Log.d(TAG, "touch obtain:" + met.toString());
+
+                    Instrumentation inst = new Instrumentation();
+                    inst.sendPointerSync(met);
+
+                } catch (InterruptedException e) {
+                    Log.e(TAG, "touchEventQueue take error---" + e.getMessage());
+                    e.printStackTrace();
                 } catch (SecurityException e) {
+                    Log.e(TAG, "Instrumentation  error---" + e.getMessage());
                     e.printStackTrace();
                 }
 
@@ -621,15 +618,26 @@ public abstract class MirClientService extends Service {
 
     @TargetApi(19)
     private class EncoderWorker implements Runnable {
-        @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
         @Override
         public void run() {
             Log.d(TAG, "EncoderWorker:start WatchDogThread");
-            startDisplayManager();//it will be jammed for loop
+//            startDisplayManager();//it will be jammed for loop
+            try {
+                playerEncoder.createMediaCodec();
+                playerEncoder.createDisplayManager();
+                playerEncoder.start();
+            } catch (IOException e) {
+                e.printStackTrace();
+                Log.d(TAG, "startDisplayManager: create virtualDisplay error");
+                stopMirService(IPlayerListener.ERR_CODE_VIRTUAL_DISPLAY,
+                        IPlayerListener.ERR_MSG_VIRTUAL_DISPLAY);
+            }
             // 创建BufferedOutputStream对象
+            ToastUtils.instance().showToast(mContext);
             while (!isExit) {
                 doEncodeWork();
             }
+            Log.d(TAG, "EncoderWorker exit");
         }
     }
 
@@ -638,17 +646,47 @@ public abstract class MirClientService extends Service {
     public void onDestroy() {
         super.onDestroy();
         Log.d(TAG, "MirClientService onDestroy...");
-        stopClient();
-        stopEncoder();
         stopForeground(true);
+        MirManager.instance().setMirRunning(false);
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                if (playerEncoder != null)
+                    playerEncoder.release();  //MediaCodec stop 有大量耗时操作
+                playerEncoder = null;
+            }
+        }).start();
+    }
+
+    private void stopMirService(final int errCode, String errMsg) {
+        Log.e(TAG, "MirClientService stopMirService..." + errCode + "&" + errMsg);
+        isExit = true;
+        isExitTouch = true;
+
+        MirManager.instance().setMirRunning(false);
+        String bye = Command.setByeData(true, errCode, errMsg);
+        sendMsg(bye);
+
+        stopHeartBeat();//停止心跳
+
+        final IPlayerListener playerListener = MirManager.instance().getMirServiceListener();
+
+        if (playerListener != null) {
+            final String info = errMsg;
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    playerListener.onError(errCode, info);
+                }
+            });
+        }
+        stopClient();
+        stopSelf();
     }
 
     private void stopClient() {
-        Log.d(TAG, "stopClient ");
-
-        sendMsg("bye");
-
-        stopHeartBeat();//停止心跳
+        Log.d(TAG, "stopClient...");
 
         if (mWebSocketClient != null) {
             Log.d(TAG, "=====> Close WebSocketClient");
@@ -657,36 +695,17 @@ public abstract class MirClientService extends Service {
         }
 
 
-        if (mVideoDataClient != null) {
-            Log.d(TAG, "=====> Close VideoDataClient");
-            mVideoDataClient.close();
-            mVideoDataClient = null;
+        if (tcpClient != null) {
+            Log.d(TAG, "=====> Close tcpClient");
+            tcpClient.close();
+            tcpClient = null;
         }
 
-    }
-
-    private void stopEncoder() {
-        isExit = true;
-
-        try {
-            if (encoder != null) {
-                Log.d(TAG, "encoder stop.................");
-                encoder.signalEndOfInputStream();
-                encoder.stop();
-                encoder.release();
-                encoder = null;
-
-            }
-
-            if (virtualDisplay != null) {
-                virtualDisplay.release();
-                virtualDisplay = null;
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
+        if (udpClient != null) {
+            Log.d(TAG, "=====> Close udpClient");
+            udpClient.close();
+            udpClient = null;
         }
-
     }
 
 }
