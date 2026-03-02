@@ -78,21 +78,17 @@ public class WebSocketServerActivity extends AppCompatActivity implements View.O
 
     @Override
     public void onClick(View view) {
-        switch (view.getId()) {
-            case R.id.button_server_start:
-                //实例化一个命令接收端，端口号暂时写死
-                test = new WebSocketServer(21095, callback1);
-                //打开通道等待连接
-                test.open();
-                break;
-            case R.id.button_server_stop:
-                test.close();
-                test = null;
-                break;
-            case R.id.button_ping:
-                test.ping(sockeId, "server ping");
-                break;
-
+        int id = view.getId();
+        if (id == R.id.button_server_start) {
+            //实例化一个命令接收端，端口号暂时写死
+            test = new WebSocketServer(21095, callback1);
+            //打开通道等待连接
+            test.open();
+        } else if (id == R.id.button_server_stop) {
+            test.close();
+            test = null;
+        } else if (id == R.id.button_ping) {
+            test.ping(sockeId, "server ping");
         }
     }
 }

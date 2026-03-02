@@ -5,7 +5,7 @@ android {
 
 
     defaultConfig {
-        applicationId "com.skyworth.server"
+        namespace "com.skyworth.dpclient"
         minSdkVersion 16
         targetSdkVersion 29
         versionCode 1002
@@ -52,4 +52,9 @@ dependencies {
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'androidx.test.ext:junit:1.1.1'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
+}
+
+// 规避 AGP check*Classpath 的 compileVersionMap 使用不可序列化类型导致 fingerprint 失败
+afterEvaluate {
+    tasks.matching { it.name.startsWith('check') && it.name.endsWith('Classpath') }.configureEach { enabled = false }
 }

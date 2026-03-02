@@ -173,22 +173,6 @@ public class BluetoothNewClient extends BlePduUtil {
             Log.e(TAG, "onConnectionChanged: " + device.getConnectionState());
         }
 
-        @Override
-        public void onConnectException(BleDevice device, int errorCode) {
-            super.onConnectException(device, errorCode);
-            Log.e(TAG, "onConnectException: 连接异常，异常状态码:" + errorCode);
-//            updateState(BluetoothClientCallback.DeviceState.FAILED);
-//            bleStatus = BLE_STATUS.IDLE;
-            Ble.getInstance().connect(device.getBleAddress(), connectCallback);
-        }
-
-        @Override
-        public void onConnectTimeOut(BleDevice device) {
-            super.onConnectTimeOut(device);
-            Log.e(TAG, "onConnectTimeOut: " + device.getBleAddress());
-            updateState(BluetoothClientCallback.DeviceState.FAILED);
-            bleStatus = BLE_STATUS.IDLE;
-        }
 
         @Override
         public void onConnectCancel(BleDevice device) {

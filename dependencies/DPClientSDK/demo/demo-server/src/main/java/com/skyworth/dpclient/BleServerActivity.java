@@ -2,21 +2,31 @@ package com.skyworth.dpclient;
 
 
 import android.bluetooth.BluetoothDevice;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import com.skyworth.dpclientsdk.ble.BlePdu;
 import com.skyworth.dpclientsdk.ble.BluetoothServer;
 import com.skyworth.dpclientsdk.ble.BluetoothServerCallBack;
 import com.skyworth.dpclientsdk.MACUtils;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class BleServerActivity extends AppCompatActivity implements View.OnClickListener {
     private static final String TAG = "server";
+    /** Android 12+ 蓝牙运行时权限请求码 */
+    private static final int REQUEST_BLUETOOTH_PERMISSIONS = 1001;
 
     private BluetoothServer bleServer;
 
@@ -67,23 +77,62 @@ public class BleServerActivity extends AppCompatActivity implements View.OnClick
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     @Override
     public void onClick(View view) {
-        switch (view.getId()) {
-            case R.id.btn_server_open:
-                bleServer = new BluetoothServer(this, callBack);
-                bleServer.openBle();
-                break;
-            case R.id.btn_server_close:
-                if (bleServer != null) {
-                    bleServer.removeService();
-                }
-                break;
-
-            case R.id.btn_response:
-                responseMsg();
-                break;
+        int id = view.getId();
+        if (id == R.id.btn_server_open) {
+            if (ensureBluetoothPermissions()) {
+                openBleServer();
+            }
+        } else if (id == R.id.btn_server_close) {
+            if (bleServer != null) {
+                bleServer.removeService();
+            }
+        } else if (id == R.id.btn_response) {
+            responseMsg();
         }
     }
 
+    /**
+     * 确保已具备蓝牙所需权限（Android 12+ 需 BLUETOOTH_CONNECT、BLUETOOTH_ADVERTISE）。
+     * 若未授权则请求权限，授权后再执行 openBleServer。
+     */
+    private boolean ensureBluetoothPermissions() {
+        // 使用字符串避免 compileSdkVersion < 31 时找不到常量
+        String connect = "android.permission.BLUETOOTH_CONNECT";
+        String advertise = "android.permission.BLUETOOTH_ADVERTISE";
+        List<String> missing = new ArrayList<>();
+        if (ContextCompat.checkSelfPermission(this, connect) != PackageManager.PERMISSION_GRANTED) {
+            missing.add(connect);
+        }
+        if (ContextCompat.checkSelfPermission(this, advertise) != PackageManager.PERMISSION_GRANTED) {
+            missing.add(advertise);
+        }
+        if (missing.isEmpty()) {
+            return true;
+        }
+        ActivityCompat.requestPermissions(this, missing.toArray(new String[0]), REQUEST_BLUETOOTH_PERMISSIONS);
+        return false;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQUEST_BLUETOOTH_PERMISSIONS) return;
+        for (int r : grantResults) {
+            if (r != PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "需要蓝牙权限才能开启 BLE 服务", Toast.LENGTH_SHORT).show();
+                return;
+            }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            openBleServer();
+        }
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+    private void openBleServer() {
+        bleServer = new BluetoothServer(this, callBack);
+        bleServer.openBle();
+    }
 
     @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     private void responseMsg() {

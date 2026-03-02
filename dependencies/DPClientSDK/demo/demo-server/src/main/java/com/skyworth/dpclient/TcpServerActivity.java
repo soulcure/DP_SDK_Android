@@ -102,17 +102,15 @@ public class TcpServerActivity extends AppCompatActivity implements View.OnClick
 
     @Override
     public void onClick(View view) {
-        switch (view.getId()) {
-            case R.id.btn_server_open:
-                server = new TcpServer(34000, TcpServer.BUFFER_SIZE_DEFAULT, mCallback);
-                server.open();
-                break;
-            case R.id.btn_server_close:
-                if (server != null) {
-                    server.close();
-                    server = null;
-                }
-                break;
+        int id = view.getId();
+        if (id == R.id.btn_server_open) {
+            server = new TcpServer(34000, TcpServer.BUFFER_SIZE_DEFAULT, mCallback);
+            server.open();
+        } else if (id == R.id.btn_server_close) {
+            if (server != null) {
+                server.close();
+                server = null;
+            }
         }
     }
 

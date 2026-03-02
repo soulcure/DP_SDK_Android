@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    package="com.skyworth.dpclient">
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -28,21 +27,21 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
-        <activity android:name=".MainActivity">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <activity android:name=".UdpClientActivity" />
-        <activity android:name=".WebSocketClientActivity" />
-        <activity android:name=".TcpClientActivity" />
-        <activity android:name=".BleClientActivity" />
-        <activity android:name=".BleClientNewActivity" />
+        <activity android:name=".UdpClientActivity" android:exported="false" />
+        <activity android:name=".WebSocketClientActivity" android:exported="false" />
+        <activity android:name=".TcpClientActivity" android:exported="false" />
+        <activity android:name=".BleClientActivity" android:exported="false" />
+        <activity android:name=".BleClientNewActivity" android:exported="false" />
 
     </application>
-
-    <uses-permission android:name="android.permission.INTERNET" />
 
 </manifest>

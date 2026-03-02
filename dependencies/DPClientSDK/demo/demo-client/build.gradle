@@ -1,13 +1,13 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 29
+    compileSdk 33
 
 
     defaultConfig {
-        applicationId "com.skyworth.client"
-        minSdkVersion 21
-        targetSdkVersion 29
+        namespace "com.skyworth.dpclient"
+        minSdk 21
+        targetSdk 33
         versionCode 1002
         versionName "1.1"
 
@@ -57,6 +57,12 @@ dependencies {
     androidTestImplementation 'androidx.test.ext:junit:1.1.2'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.3.0'
 
-    implementation 'cn.com.superLei:blelibrary:3.1.0'
+    // 原 JCenter 的 cn.com.superLei:blelibrary 已不可用，改用 JitPack 同源库（包名 cn.com.heaton.blelibrary）
+    implementation 'com.github.aicareles:Android-BLE:3.3.1'
     implementation'com.orhanobut:logger:2.2.0'
+}
+
+// 规避 AGP check*Classpath 的 compileVersionMap 使用不可序列化类型导致 fingerprint 失败
+afterEvaluate {
+    tasks.matching { it.name.startsWith('check') && it.name.endsWith('Classpath') }.configureEach { enabled = false }
 }

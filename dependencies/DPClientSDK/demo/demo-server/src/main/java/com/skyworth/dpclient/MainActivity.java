@@ -24,22 +24,17 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     @Override
     public void onClick(View view) {
-        switch (view.getId()) {
-            case R.id.btn_websocket:
-                startActivity(new Intent(this, WebSocketServerActivity.class));
-                break;
-            case R.id.btn_tcp:
-                startActivity(new Intent(this, TcpServerActivity.class));
-                break;
-            case R.id.btn_udp:
-                startActivity(new Intent(this, UdpServerActivity.class));
-                break;
-            case R.id.btn_ble:
-                startActivity(new Intent(this, BleServerActivity.class));
-                break;
-            case R.id.btn_fast_ble:
-                startActivity(new Intent(this, FastBleServerActivity.class));
-                break;
+        int id = view.getId();
+        if (id == R.id.btn_websocket) {
+            startActivity(new Intent(this, WebSocketServerActivity.class));
+        } else if (id == R.id.btn_tcp) {
+            startActivity(new Intent(this, TcpServerActivity.class));
+        } else if (id == R.id.btn_udp) {
+            startActivity(new Intent(this, UdpServerActivity.class));
+        } else if (id == R.id.btn_ble) {
+            startActivity(new Intent(this, BleServerActivity.class));
+        } else if (id == R.id.btn_fast_ble) {
+            startActivity(new Intent(this, FastBleServerActivity.class));
         }
     }
 }

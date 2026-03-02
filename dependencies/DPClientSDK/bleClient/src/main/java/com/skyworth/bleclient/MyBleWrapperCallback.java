@@ -70,6 +70,11 @@ public class MyBleWrapperCallback extends BleWrapperCallback<BleDevice> {
     }
 
     @Override
+    public void onNotifyFailed(BleDevice device, int failedCode) {
+
+    }
+
+    @Override
     public void onNotifyCanceled(BleDevice device) {
         super.onNotifyCanceled(device);
         Log.d(TAG, "onNotifyCanceled: ");

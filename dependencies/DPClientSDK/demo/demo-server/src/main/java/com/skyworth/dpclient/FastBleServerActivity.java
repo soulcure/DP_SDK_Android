@@ -88,30 +88,26 @@ public class FastBleServerActivity extends AppCompatActivity implements View.OnC
     @Override
     public void onClick(View view) {
         String str = "";
-        switch (view.getId()) {
-            case R.id.btn_server_open:
-                str = status.toString();
-                bleServer.openBle();
-                break;
-            case R.id.btn_server_close:
-                if (bleServer != null) {
-                    bleServer.removeService();
-                }
-                break;
-            case R.id.btn_update:
-                int next = status.ordinal() + 1;
-                if (DongleStatus.values().length <= next) {
-                    next = 0;
-                }
-                status = DongleStatus.values()[next];
-                str = status.toString();
-                Log.d(TAG, "onClick() called with: status = [" + str + "]");
-                tv_info.setText(str);
-                bleServer.setCustomData("FFFFFF0" + next);
-                break;
-            case R.id.btn_response:
-                responseMsg();
-                break;
+        int id = view.getId();
+        if (id == R.id.btn_server_open) {
+            str = status.toString();
+            bleServer.openBle();
+        } else if (id == R.id.btn_server_close) {
+            if (bleServer != null) {
+                bleServer.removeService();
+            }
+        } else if (id == R.id.btn_update) {
+            int next = status.ordinal() + 1;
+            if (DongleStatus.values().length <= next) {
+                next = 0;
+            }
+            status = DongleStatus.values()[next];
+            str = status.toString();
+            Log.d(TAG, "onClick() called with: status = [" + str + "]");
+            tv_info.setText(str);
+            bleServer.setCustomData("FFFFFF0" + next);
+        } else if (id == R.id.btn_response) {
+            responseMsg();
         }
     }
 

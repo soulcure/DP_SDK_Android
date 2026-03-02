@@ -67,30 +67,26 @@ public class UdpClientActivity extends AppCompatActivity implements View.OnClick
 
     @Override
     public void onClick(View view) {
-        switch (view.getId()) {
-            case R.id.btn_open:
-                String ip = input.getText().toString();
-                udpClient = new UdpClient(ip, 39999, callback);
-                udpClient.open();
-                break;
-            case R.id.btn_close:
-                if (udpClient != null) {
-                    udpClient.close();
-                    udpClient = null;
-                }
-                break;
-            case R.id.btn_bytes:
-                if (udpClient != null) {
-                    byte[] bytes = new byte[]{'a', 'b', 'c'};
-                    udpClient.sendData(bytes);
-                }
-                break;
-            case R.id.btn_string:
-                if (udpClient != null) {
-                    String str = "我是一个小宝宝" + count++;
-                    udpClient.sendData(str);
-                }
-                break;
+        int id = view.getId();
+        if (id == R.id.btn_open) {
+            String ip = input.getText().toString();
+            udpClient = new UdpClient(ip, 39999, callback);
+            udpClient.open();
+        } else if (id == R.id.btn_close) {
+            if (udpClient != null) {
+                udpClient.close();
+                udpClient = null;
+            }
+        } else if (id == R.id.btn_bytes) {
+            if (udpClient != null) {
+                byte[] bytes = new byte[]{'a', 'b', 'c'};
+                udpClient.sendData(bytes);
+            }
+        } else if (id == R.id.btn_string) {
+            if (udpClient != null) {
+                String str = "我是一个小宝宝" + count++;
+                udpClient.sendData(str);
+            }
         }
     }
 

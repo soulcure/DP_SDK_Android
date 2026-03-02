@@ -87,17 +87,15 @@ public class UdpServerActivity extends AppCompatActivity implements View.OnClick
 
     @Override
     public void onClick(View view) {
-        switch (view.getId()) {
-            case R.id.btn_open:
-                udpServer = new UdpServer(39999, mCallback);
-                udpServer.open();
-                break;
-            case R.id.btn_close:
-                if (udpServer != null) {
-                    udpServer.close();
-                    udpServer = null;
-                }
-                break;
+        int id = view.getId();
+        if (id == R.id.btn_open) {
+            udpServer = new UdpServer(39999, mCallback);
+            udpServer.open();
+        } else if (id == R.id.btn_close) {
+            if (udpServer != null) {
+                udpServer.close();
+                udpServer = null;
+            }
         }
     }
 

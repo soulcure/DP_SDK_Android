@@ -62,19 +62,17 @@ public class WebSocketClientActivity extends AppCompatActivity implements View.O
 
     @Override
     public void onClick(View view) {
-        switch (view.getId()) {
-            case R.id.button_client_start:
-                String ip = input.getText().toString();
-                //发送命令
-                //实力化一个命令发送端，参数为接受端的IP地址和端口号。这个会和发现服务（云端or局域网）对接，由发现服务提供
-                test2 = new WebSocketClient(ip, 21095, callback2);
-                //打开发送通道
-                test2.open();
-                break;
-            case R.id.button_client_send:
-                test2.ping("this ping message");
-                //test2.pong("this pong message");
-                break;
+        int id = view.getId();
+        if (id == R.id.button_client_start) {
+            String ip = input.getText().toString();
+            //发送命令
+            //实力化一个命令发送端，参数为接受端的IP地址和端口号。这个会和发现服务（云端or局域网）对接，由发现服务提供
+            test2 = new WebSocketClient(ip, 21095, callback2);
+            //打开发送通道
+            test2.open();
+        } else if (id == R.id.button_client_send) {
+            test2.ping("this ping message");
+            //test2.pong("this pong message");
         }
     }
 }

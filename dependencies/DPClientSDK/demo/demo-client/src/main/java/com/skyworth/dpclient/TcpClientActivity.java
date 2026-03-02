@@ -176,124 +176,110 @@ public class TcpClientActivity extends AppCompatActivity implements View.OnClick
 
     @Override
     public void onClick(View view) {
-        switch (view.getId()) {
-            case R.id.btn_open:
-                String ip = input.getText().toString();
+        int id = view.getId();
+        if (id == R.id.btn_open) {
+            String ip = input.getText().toString();
 
-                /*if (client == null) {
-                    client = new TcpClient(ip, 34000, mCallBack);
-                } else {
-                    client.close();
+            /*if (client == null) {
+                client = new TcpClient(ip, 34000, mCallBack);
+            } else {
+                client.close();
+            }
+
+            client.open();
+            mStutasBoolean = true;*/
+
+            localConnect = new LocalConnect();
+            localConnect.open(ip, new LocalConnect.ConnectCallBack() {
+                @Override
+                public void onConnect(int code, String msg) {
+                    Log.e("yao", "LocalConnect ---" + code + "---" + msg);
                 }
+            });
+        } else if (id == R.id.btn_close) {
+            if (client != null) {
+                client.close();
+                client = null;
+            }
 
-                client.open();
-                mStutasBoolean = true;*/
+            mStutasBoolean = false;
+        } else if (id == R.id.btn_send_bytes) {
+            byte[] b = new byte[]{9, 9, 9, 9, 9, 9, 9, 9, 9};
+            client.sendData(b);
+        } else if (id == R.id.btn_send_str) {
+            String str = "幼儿园";
+            client.sendData(str);
+        } else if (id == R.id.btn_send_ping) {
+            final String str1 = "小朋友";
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    while (mStutasBoolean) {
 
-                localConnect = new LocalConnect();
-                localConnect.open(ip, new LocalConnect.ConnectCallBack() {
-                    @Override
-                    public void onConnect(int code, String msg) {
-                        Log.e("yao", "LocalConnect ---" + code + "---" + msg);
-                    }
-                });
+                        mCount++;
+                        atomicInteger.getAndIncrement();
 
-                break;
-            case R.id.btn_close:
-                if (client != null) {
-                    client.close();
-                    client = null;
-                }
+                        Log.d(TAG, "atomicInteger:" + atomicInteger.get() + " mCount:" + mCount);
 
-                mStutasBoolean = false;
-                break;
-            case R.id.btn_send_bytes:
-                byte[] b = new byte[]{9, 9, 9, 9, 9, 9, 9, 9, 9};
-                client.sendData(b);
-
-                break;
-            case R.id.btn_send_str:
-                String str = "幼儿园";
-                client.sendData(str);
-
-                break;
-            case R.id.btn_send_ping:
-                final String str1 = "小朋友";
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        while (mStutasBoolean) {
-
-                            mCount++;
-                            atomicInteger.getAndIncrement();
-
-                            Log.d(TAG, "atomicInteger:" + atomicInteger.get() + " mCount:" + mCount);
-
-                            client.ping(str1);
-
-                            try {
-                                Thread.sleep(100);
-                            } catch (InterruptedException e) {
-                                e.printStackTrace();
-                            }
-
-
-                        }
-
-                    }
-                }).start();
-                break;
-            case R.id.btn_key_up:
-                String up = "{\"id\":\"a21239e1-1fa8-4dbb-8c5a-4959cd65eb5e\",\"source\":\"{\\\"id\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\",\\\"extra\\\":{\\\"im-local\\\":\\\"172.20.130.135:34000\\\",\\\"address-local\\\":\\\"172.20.130.135\\\",\\\"stream-local\\\":\\\"172.20.130.135\\\",\\\"im-cloud\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\"}}\",\"target\":\"{\\\"id\\\":\\\"d0e69442ec094a918ba1d06699b537e5\\\",\\\"extra\\\":{\\\"im-local\\\":\\\"172.20.146.231:34000\\\",\\\"address-local\\\":\\\"172.20.146.231\\\",\\\"stream-local\\\":\\\"172.20.146.231\\\",\\\"im-cloud\\\":\\\"d0e69442ec094a918ba1d06699b537e5\\\"}}\",\"client-source\":\"ss-clientID-SmartScreen\",\"client-target\":\"ss-clientID-appstore_12345\",\"type\":\"TEXT\",\"content\":\"{\\\"cmd\\\":\\\"24\\\",\\\"param\\\":\\\"\\\",\\\"type\\\":\\\"KEY_EVENT\\\"}\",\"extra\":{},\"reply\":false}";
-                //client.sendData(up.getBytes());
-
-                localConnect.sendCommand(up, new LocalConnect.SendCallBack() {
-                    @Override
-                    public void onReceive(String msg) {
-                        Log.e("yao", "localConnect sendMsg onReceive---" + msg);
-                    }
-                });
-
-                break;
-            case R.id.btn_key_down:
-                String down = "{\"id\":\"a21239e1-1fa8-4dbb-8c5a-4959cd65eb5e\",\"source\":\"{\\\"id\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\",\\\"extra\\\":{\\\"im-local\\\":\\\"172.20.130.135:34000\\\",\\\"address-local\\\":\\\"172.20.130.135\\\",\\\"stream-local\\\":\\\"172.20.130.135\\\",\\\"im-cloud\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\"}}\",\"target\":\"{\\\"id\\\":\\\"d0e69442ec094a918ba1d06699b537e5\\\",\\\"extra\\\":{\\\"im-local\\\":\\\"172.20.146.231:34000\\\",\\\"address-local\\\":\\\"172.20.146.231\\\",\\\"stream-local\\\":\\\"172.20.146.231\\\",\\\"im-cloud\\\":\\\"d0e69442ec094a918ba1d06699b537e5\\\"}}\",\"client-source\":\"ss-clientID-SmartScreen\",\"client-target\":\"ss-clientID-appstore_12345\",\"type\":\"TEXT\",\"content\":\"{\\\"cmd\\\":\\\"25\\\",\\\"param\\\":\\\"\\\",\\\"type\\\":\\\"KEY_EVENT\\\"}\",\"extra\":{},\"reply\":false}";
-                //client.sendData(down.getBytes());
-
-                localConnect.sendCommand(down, new LocalConnect.SendCallBack() {
-                    @Override
-                    public void onReceive(String msg) {
-                        Log.e("yao", "localConnect sendMsg onReceive---" + msg);
-                    }
-                });
-                break;
-
-            case R.id.btn_info:
-                localConnect.reqDeviceInfo(new LocalConnect.SendCallBack() {
-                    @Override
-                    public void onReceive(String msg) {
+                        client.ping(str1);
 
                         try {
-                            JSONObject jsonObject = new JSONObject(msg);
-                            int code = jsonObject.optInt("code");
-                            String message = jsonObject.optString("msg");
-                            String proto = jsonObject.optString("proto");
-                            String device = jsonObject.optString("device");
-
-                            if (code == 0
-                                    && !TextUtils.isEmpty(proto)
-                                    && !TextUtils.isEmpty(device)
-                                    && proto.equals("TVDeviceInfo")) {
-
-                                Gson gson = new Gson();
-                                TVDeviceInfo t = gson.fromJson(device, TVDeviceInfo.class);
-                                Log.e("yao", "reqDeviceInfo---" + t.toString());
-                            }
-                        } catch (Exception e) {
+                            Thread.sleep(100);
+                        } catch (InterruptedException e) {
                             e.printStackTrace();
                         }
-                    }
-                });
-                break;
 
+
+                    }
+
+                }
+            }).start();
+        } else if (id == R.id.btn_key_up) {
+            String up = "{\"id\":\"a21239e1-1fa8-4dbb-8c5a-4959cd65eb5e\",\"source\":\"{\\\"id\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\",\\\"extra\\\":{\\\"im-local\\\":\\\"172.20.130.135:34000\\\",\\\"address-local\\\":\\\"172.20.130.135\\\",\\\"stream-local\\\":\\\"172.20.130.135\\\",\\\"im-cloud\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\"}}\",\"target\":\"{\\\"id\\\":\\\"d0e69442ec094a918ba1d06699b537e5\\\",\\\"extra\\\":{\\\"im-local\\\":\\\"172.20.146.231:34000\\\",\\\"address-local\\\":\\\"172.20.146.231\\\",\\\"stream-local\\\":\\\"172.20.146.231\\\",\\\"im-cloud\\\":\\\"d0e69442ec094a918ba1d06699b537e5\\\"}}\",\"client-source\":\"ss-clientID-SmartScreen\",\"client-target\":\"ss-clientID-appstore_12345\",\"type\":\"TEXT\",\"content\":\"{\\\"cmd\\\":\\\"24\\\",\\\"param\\\":\\\"\\\",\\\"type\\\":\\\"KEY_EVENT\\\"}\",\"extra\":{},\"reply\":false}";
+            //client.sendData(up.getBytes());
+
+            localConnect.sendCommand(up, new LocalConnect.SendCallBack() {
+                @Override
+                public void onReceive(String msg) {
+                    Log.e("yao", "localConnect sendMsg onReceive---" + msg);
+                }
+            });
+        } else if (id == R.id.btn_key_down) {
+            String down = "{\"id\":\"a21239e1-1fa8-4dbb-8c5a-4959cd65eb5e\",\"source\":\"{\\\"id\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\",\\\"extra\\\":{\\\"im-local\\\":\\\"172.20.130.135:34000\\\",\\\"address-local\\\":\\\"172.20.130.135\\\",\\\"stream-local\\\":\\\"172.20.130.135\\\",\\\"im-cloud\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\"}}\",\"target\":\"{\\\"id\\\":\\\"d0e69442ec094a918ba1d06699b537e5\\\",\\\"extra\\\":{\\\"im-local\\\":\\\"172.20.146.231:34000\\\",\\\"address-local\\\":\\\"172.20.146.231\\\",\\\"stream-local\\\":\\\"172.20.146.231\\\",\\\"im-cloud\\\":\\\"d0e69442ec094a918ba1d06699b537e5\\\"}}\",\"client-source\":\"ss-clientID-SmartScreen\",\"client-target\":\"ss-clientID-appstore_12345\",\"type\":\"TEXT\",\"content\":\"{\\\"cmd\\\":\\\"25\\\",\\\"param\\\":\\\"\\\",\\\"type\\\":\\\"KEY_EVENT\\\"}\",\"extra\":{},\"reply\":false}";
+            //client.sendData(down.getBytes());
+
+            localConnect.sendCommand(down, new LocalConnect.SendCallBack() {
+                @Override
+                public void onReceive(String msg) {
+                    Log.e("yao", "localConnect sendMsg onReceive---" + msg);
+                }
+            });
+        } else if (id == R.id.btn_info) {
+            localConnect.reqDeviceInfo(new LocalConnect.SendCallBack() {
+                @Override
+                public void onReceive(String msg) {
+
+                    try {
+                        JSONObject jsonObject = new JSONObject(msg);
+                        int code = jsonObject.optInt("code");
+                        String message = jsonObject.optString("msg");
+                        String proto = jsonObject.optString("proto");
+                        String device = jsonObject.optString("device");
+
+                        if (code == 0
+                                && !TextUtils.isEmpty(proto)
+                                && !TextUtils.isEmpty(device)
+                                && proto.equals("TVDeviceInfo")) {
+
+                            Gson gson = new Gson();
+                            TVDeviceInfo t = gson.fromJson(device, TVDeviceInfo.class);
+                            Log.e("yao", "reqDeviceInfo---" + t.toString());
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
         }
     }
 

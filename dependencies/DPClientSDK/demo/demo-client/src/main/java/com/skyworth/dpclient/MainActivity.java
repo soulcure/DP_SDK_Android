@@ -7,6 +7,7 @@ import android.view.View;
 import androidx.appcompat.app.AppCompatActivity;
 
 
+
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
 
     private String TAG = MainActivity.class.getSimpleName();
@@ -29,22 +30,17 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     @Override
     public void onClick(View view) {
-        switch (view.getId()) {
-            case R.id.btn_websocket:
-                startActivity(new Intent(this, WebSocketClientActivity.class));
-                break;
-            case R.id.btn_tcp:
-                startActivity(new Intent(this, TcpClientActivity.class));
-                break;
-            case R.id.btn_udp:
-                startActivity(new Intent(this, UdpClientActivity.class));
-                break;
-            case R.id.btn_ble:
-                startActivity(new Intent(this, BleClientActivity.class));
-                break;
-            case R.id.btn_new_ble:
-                startActivity(new Intent(this, BleClientNewActivity.class));
-
+        int id = view.getId();
+        if (id == R.id.btn_websocket) {
+            startActivity(new Intent(this, WebSocketClientActivity.class));
+        } else if (id == R.id.btn_tcp) {
+            startActivity(new Intent(this, TcpClientActivity.class));
+        } else if (id == R.id.btn_udp) {
+            startActivity(new Intent(this, UdpClientActivity.class));
+        } else if (id == R.id.btn_ble) {
+            startActivity(new Intent(this, BleClientActivity.class));
+        } else if (id == R.id.btn_new_ble) {
+            startActivity(new Intent(this, BleClientNewActivity.class));
         }
     }
 }

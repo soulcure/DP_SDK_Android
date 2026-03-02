@@ -120,59 +120,47 @@ public class BleClientNewActivity extends AppCompatActivity implements View.OnCl
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     @Override
     public void onClick(View view) {
-        switch (view.getId()) {
-            case R.id.btn_open:
-
-                bleClient = new BluetoothNewClient(this, callback, mProcessHandler, false);
-                bleClient.startScan(mac);
-                break;
-            case R.id.btn_close:
-                if (bleClient != null) {
-                    bleClient.disConnect();
-                    bleClient = null;
-                }
-                break;
-            case R.id.btn_key_up:
-                String up = "{\"id\":\"a21239e1-1fa8-4dbb-8c5a-4959cd65eb5e\",\"source\":\"{\\\"id\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\",\\\"extra\\\":{\\\"im-local\\\":\\\"172.20.130.135:34000\\\",\\\"address-local\\\":\\\"172.20.130.135\\\",\\\"stream-local\\\":\\\"172.20.130.135\\\",\\\"im-cloud\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\"}}\",\"target\":\"{\\\"id\\\":\\\"d0e69442ec094a918ba1d06699b537e5\\\",\\\"extra\\\":{\\\"im-local\\\":\\\"172.20.146.231:34000\\\",\\\"address-local\\\":\\\"172.20.146.231\\\",\\\"stream-local\\\":\\\"172.20.146.231\\\",\\\"im-cloud\\\":\\\"d0e69442ec094a918ba1d06699b537e5\\\"}}\",\"client-source\":\"ss-clientID-SmartScreen\",\"client-target\":\"ss-clientID-appstore_12345\",\"type\":\"TEXT\",\"content\":\"{\\\"cmd\\\":\\\"24\\\",\\\"param\\\":\\\"\\\",\\\"type\\\":\\\"KEY_EVENT\\\"}\",\"extra\":{},\"reply\":false}";
-                bleClient.sendMsg(up, BlePdu.TEMP_CMD);
-
-                break;
-            case R.id.btn_key_down:
-                String down = "{\"id\":\"a21239e1-1fa8-4dbb-8c5a-4959cd65eb5e\",\"source\":\"{\\\"id\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\",\\\"extra\\\":{\\\"im-local\\\":\\\"172.20.130.135:34000\\\",\\\"address-local\\\":\\\"172.20.130.135\\\",\\\"stream-local\\\":\\\"172.20.130.135\\\",\\\"im-cloud\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\"}}\",\"target\":\"{\\\"id\\\":\\\"d0e69442ec094a918ba1d06699b537e5\\\",\\\"extra\\\":{\\\"im-local\\\":\\\"172.20.146.231:34000\\\",\\\"address-local\\\":\\\"172.20.146.231\\\",\\\"stream-local\\\":\\\"172.20.146.231\\\",\\\"im-cloud\\\":\\\"d0e69442ec094a918ba1d06699b537e5\\\"}}\",\"client-source\":\"ss-clientID-SmartScreen\",\"client-target\":\"ss-clientID-appstore_12345\",\"type\":\"TEXT\",\"content\":\"{\\\"cmd\\\":\\\"25\\\",\\\"param\\\":\\\"\\\",\\\"type\\\":\\\"KEY_EVENT\\\"}\",\"extra\":{},\"reply\":false}";
-                bleClient.sendMsg(down, BlePdu.TEMP_CMD);
-
-                break;
-            case R.id.btn_info:
-                /*{
-                    "proto": "TVDeviceInfo",   //内容固定
-                    "deviceInfo": "",  //内容为空
-                    "session": ""  //设置手机本机的session
-                }*/
-                String info = "{\"proto\": \"TVDeviceInfo\",\"deviceInfo\": \"\",\"session\": \"{\\\"id\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\",\\\"extra\\\":{\\\"im-local\\\":\\\"172.20.130.135:34000\\\",\\\"address-local\\\":\\\"172.20.130.135\\\",\\\"stream-local\\\":\\\"172.20.130.135\\\",\\\"im-cloud\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\"}}\"}";
-                bleClient.sendMsg(info, BlePdu.TEMP_PROTO);
-
-                break;
-            case R.id.btn_wifi:
+        int id = view.getId();
+        if (id == R.id.btn_open) {
+            bleClient = new BluetoothNewClient(this, callback, mProcessHandler, false);
+            bleClient.startScan(mac);
+        } else if (id == R.id.btn_close) {
+            if (bleClient != null) {
+                bleClient.disConnect();
+                bleClient = null;
+            }
+        } else if (id == R.id.btn_key_up) {
+            String up = "{\"id\":\"a21239e1-1fa8-4dbb-8c5a-4959cd65eb5e\",\"source\":\"{\\\"id\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\",\\\"extra\\\":{\\\"im-local\\\":\\\"172.20.130.135:34000\\\",\\\"address-local\\\":\\\"172.20.130.135\\\",\\\"stream-local\\\":\\\"172.20.130.135\\\",\\\"im-cloud\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\"}}\",\"target\":\"{\\\"id\\\":\\\"d0e69442ec094a918ba1d06699b537e5\\\",\\\"extra\\\":{\\\"im-local\\\":\\\"172.20.146.231:34000\\\",\\\"address-local\\\":\\\"172.20.146.231\\\",\\\"stream-local\\\":\\\"172.20.146.231\\\",\\\"im-cloud\\\":\\\"d0e69442ec094a918ba1d06699b537e5\\\"}}\",\"client-source\":\"ss-clientID-SmartScreen\",\"client-target\":\"ss-clientID-appstore_12345\",\"type\":\"TEXT\",\"content\":\"{\\\"cmd\\\":\\\"24\\\",\\\"param\\\":\\\"\\\",\\\"type\\\":\\\"KEY_EVENT\\\"}\",\"extra\":{},\"reply\":false}";
+            bleClient.sendMsg(up, BlePdu.TEMP_CMD);
+        } else if (id == R.id.btn_key_down) {
+            String down = "{\"id\":\"a21239e1-1fa8-4dbb-8c5a-4959cd65eb5e\",\"source\":\"{\\\"id\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\",\\\"extra\\\":{\\\"im-local\\\":\\\"172.20.130.135:34000\\\",\\\"address-local\\\":\\\"172.20.130.135\\\",\\\"stream-local\\\":\\\"172.20.130.135\\\",\\\"im-cloud\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\"}}\",\"target\":\"{\\\"id\\\":\\\"d0e69442ec094a918ba1d06699b537e5\\\",\\\"extra\\\":{\\\"im-local\\\":\\\"172.20.146.231:34000\\\",\\\"address-local\\\":\\\"172.20.146.231\\\",\\\"stream-local\\\":\\\"172.20.146.231\\\",\\\"im-cloud\\\":\\\"d0e69442ec094a918ba1d06699b537e5\\\"}}\",\"client-source\":\"ss-clientID-SmartScreen\",\"client-target\":\"ss-clientID-appstore_12345\",\"type\":\"TEXT\",\"content\":\"{\\\"cmd\\\":\\\"25\\\",\\\"param\\\":\\\"\\\",\\\"type\\\":\\\"KEY_EVENT\\\"}\",\"extra\":{},\"reply\":false}";
+            bleClient.sendMsg(down, BlePdu.TEMP_CMD);
+        } else if (id == R.id.btn_info) {
+            /*{
+                "proto": "TVDeviceInfo",   //内容固定
+                "deviceInfo": "",  //内容为空
+                "session": ""  //设置手机本机的session
+            }*/
+            String info = "{\"proto\": \"TVDeviceInfo\",\"deviceInfo\": \"\",\"session\": \"{\\\"id\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\",\\\"extra\\\":{\\\"im-local\\\":\\\"172.20.130.135:34000\\\",\\\"address-local\\\":\\\"172.20.130.135\\\",\\\"stream-local\\\":\\\"172.20.130.135\\\",\\\"im-cloud\\\":\\\"baba946e63f7404cbb976abcbbb145d1\\\"}}\"}";
+            bleClient.sendMsg(info, BlePdu.TEMP_PROTO);
+        } else if (id == R.id.btn_wifi) {
             /*{
                 "proto": "ConfigureWiFi",
                  "ssid": "Coocaatest04",
                  "password": "23757007"
             }*/
-                //String wifi = "{\"proto\": \"ConfigureWiFi\", \"ssid\": \"Coocaatest04\", \"password\": \"23757007\"}";
-                String wifi = "{\"proto\": \"ConfigureWiFi\", \"ssid\": \"colin\", \"password\": \"12345678\"}";
-                bleClient.sendMsg(wifi, BlePdu.TEMP_PROTO);
+            //String wifi = "{\"proto\": \"ConfigureWiFi\", \"ssid\": \"Coocaatest04\", \"password\": \"23757007\"}";
+            String wifi = "{\"proto\": \"ConfigureWiFi\", \"ssid\": \"colin\", \"password\": \"12345678\"}";
+            bleClient.sendMsg(wifi, BlePdu.TEMP_PROTO);
 
-                //String targetSid = "Coocaatest04";
-                ///String targetPsd = "27357007";
+            //String targetSid = "Coocaatest04";
+            ///String targetPsd = "27357007";
 
-                //String targetSid = "colin";
-                //String targetPsd = "12345678";
+            //String targetSid = "colin";
+            //String targetPsd = "12345678";
 
-                //String enc = "WPA";
-                //WifiConnectManager.connectWifi(this, targetSid, targetPsd, enc);
-
-                break;
-
+            //String enc = "WPA";
+            //WifiConnectManager.connectWifi(this, targetSid, targetPsd, enc);
         }
     }
 

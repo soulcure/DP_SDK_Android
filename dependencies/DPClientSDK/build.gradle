@@ -4,23 +4,15 @@ buildscript {
     
     repositories {
         google()
-        jcenter()
-        
+        mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:3.6.1'
+        // AGP 7.4.x 在 Gradle 8 上会调已移除的 DependencyHandler.module()，需使用 AGP 8.x
+        classpath 'com.android.tools.build:gradle:8.5.2'
         
 
         // NOTE: Do not place your application dependencies here; they belong
         // in the individual module build.gradle files
-    }
-}
-
-allprojects {
-    repositories {
-        google()
-        jcenter()
-        
     }
 }
 

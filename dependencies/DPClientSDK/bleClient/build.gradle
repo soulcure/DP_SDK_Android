@@ -1,6 +1,7 @@
 apply plugin: 'com.android.library'
 
 android {
+    namespace 'com.skyworth.bleclient'
     compileSdkVersion 29
 
     defaultConfig {
@@ -25,7 +26,8 @@ dependencies {
     api fileTree(dir: 'libs', include: ['*.jar', '*.aar'])
     implementation 'androidx.appcompat:appcompat:1.2.0'
 //    api project(':core')
-    implementation 'cn.com.superLei:blelibrary:3.1.0'
+    // 原 JCenter 的 cn.com.superLei:blelibrary 已不可用，改用 JitPack 同源库（包名 cn.com.heaton.blelibrary）
+    implementation 'com.github.aicareles:Android-BLE:3.3.1'
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'androidx.test.ext:junit:1.1.2'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.3.0'
