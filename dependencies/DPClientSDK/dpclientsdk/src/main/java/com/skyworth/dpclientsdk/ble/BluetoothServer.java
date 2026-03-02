@@ -140,6 +140,9 @@ public class BluetoothServer extends BlePduUtil {
      */
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     private void startAdvertise() {
+        // 设置 BLE 广播名称为 wifi_config（适配器名称会随扫描响应被扫描端收到）
+        mAdapter.setName("wifi_config");
+
         ParcelUuid parcelUuid = new ParcelUuid(mUuid);
         mAdvertiser = mAdapter.getBluetoothLeAdvertiser();
 
@@ -151,17 +154,20 @@ public class BluetoothServer extends BlePduUtil {
                 .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
                 .build();
 
-        //初始化广播包
+        // 主广播包：仅放 Service UUID，避免超过 31 字节限制（errorCode=1 DATA_TOO_LARGE）
         AdvertiseData advertiseData = new AdvertiseData.Builder()
-                //设置广播设备名称
                 .setIncludeDeviceName(false)
-                //设置发射功率级别
                 .setIncludeTxPowerLevel(false)
-                //设置广播的服务`UUID`
                 .addServiceUuid(parcelUuid)
                 .build();
 
-        mAdvertiser.startAdvertising(settings, advertiseData, mAdvertiseCallback);
+        // 扫描响应包：放设备名称 wifi_config，扫描端请求时会收到
+        AdvertiseData scanResponse = new AdvertiseData.Builder()
+                .setIncludeDeviceName(true)
+                .setIncludeTxPowerLevel(false)
+                .build();
+
+        mAdvertiser.startAdvertising(settings, advertiseData, scanResponse, mAdvertiseCallback);
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
