@@ -381,17 +381,11 @@ public class BluetoothServer extends BlePduUtil {
     public void sendMessage(final String message, final byte type, final BluetoothDevice device) {
         byte[] data = message.getBytes();
         BlePdu pdu = new BlePdu();
-        pdu.pduType = type;
+        pdu.cmd = type;
         pdu.length = (short) data.length;
         pdu.body = data;
 
-        final ByteBuffer byteBuffer = ByteBuffer.allocate(BlePdu.PDU_HEADER_LENGTH + pdu.body.length);
-        byteBuffer.put(BlePdu.pduStartFlag);
-        byteBuffer.put(pdu.pduType);
-        byteBuffer.putShort(pdu.length);
-        byteBuffer.put(pdu.body);
-        byteBuffer.flip();
-
+        final ByteBuffer byteBuffer = pdu.serializePdu();
         mProcessHandler.post(new Runnable() {
             @RequiresApi(api = Build.VERSION_CODES.JELLY_BEAN_MR2)
             @Override

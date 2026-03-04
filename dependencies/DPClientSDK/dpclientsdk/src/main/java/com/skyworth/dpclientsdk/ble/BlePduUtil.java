@@ -29,7 +29,7 @@ public abstract class BlePduUtil {
         if (buffer.limit() > BlePdu.PDU_BASIC_LENGTH) {
             byte begin = buffer.get(0);
             Log.v(TAG, "pdu begin is " + begin);
-            if (begin != BlePdu.pduStartFlag) {
+            if (begin != BlePdu.flag) {
                 Log.e(TAG, "pdu header error buffer limit:" + buffer.limit());
                 buffer.clear();
                 return -1;
@@ -44,7 +44,7 @@ public abstract class BlePduUtil {
         if (buffer.limit() >= BlePdu.PDU_HEADER_LENGTH) {
             //has full header
             int bodyLength = buffer.getShort(BlePdu.PDU_BODY_LENGTH_INDEX);
-            int totalLength = bodyLength + BlePdu.PDU_HEADER_LENGTH;
+            int totalLength = bodyLength + BlePdu.PDU_HEADER_LENGTH + BlePdu.PDU_CRC_LENGTH;
 
             if (totalLength < buffer.limit()) {
                 //has a full pack.
@@ -94,11 +94,12 @@ public abstract class BlePduUtil {
         buffer.flip();
 
         buffer.get();  //units.flag
-        units.pduType = buffer.get();
         short length = buffer.getShort();
         units.length = length;
+        units.cmd = buffer.get();
         units.body = new byte[length];
         buffer.get(units.body);
+        units.crc = buffer.get();
         return units;
     }
 
