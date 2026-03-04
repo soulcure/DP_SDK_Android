@@ -28,6 +28,7 @@ import com.skyworth.dpclientsdk.MACUtils;
 import com.skyworth.dpclientsdk.ProcessHandler;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -140,34 +141,22 @@ public class BluetoothServer extends BlePduUtil {
      */
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     private void startAdvertise() {
-        // 设置 BLE 广播名称为 wifi_config（适配器名称会随扫描响应被扫描端收到）
         mAdapter.setName("wifi_config");
 
-        ParcelUuid parcelUuid = new ParcelUuid(mUuid);
         mAdvertiser = mAdapter.getBluetoothLeAdvertiser();
 
         AdvertiseSettings settings = new AdvertiseSettings.Builder()
                 .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
                 .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
                 .setConnectable(true)
-                .setTimeout(0)
-                .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+                .setTimeout(0)  // 不自动停止
                 .build();
 
-        // 主广播包：仅放 Service UUID，避免超过 31 字节限制（errorCode=1 DATA_TOO_LARGE）
         AdvertiseData advertiseData = new AdvertiseData.Builder()
-                .setIncludeDeviceName(false)
-                .setIncludeTxPowerLevel(false)
-                .addServiceUuid(parcelUuid)
-                .build();
-
-        // 扫描响应包：放设备名称 wifi_config，扫描端请求时会收到
-        AdvertiseData scanResponse = new AdvertiseData.Builder()
                 .setIncludeDeviceName(true)
-                .setIncludeTxPowerLevel(false)
                 .build();
 
-        mAdvertiser.startAdvertising(settings, advertiseData, scanResponse, mAdvertiseCallback);
+        mAdvertiser.startAdvertising(settings, advertiseData, null, mAdvertiseCallback);
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
@@ -336,6 +325,7 @@ public class BluetoothServer extends BlePduUtil {
             ByteBuffer byteBuffer = mByteReadBufferMap.get(device);
             if (byteBuffer == null) {
                 byteBuffer = ByteBuffer.allocate(1024 * 100);
+                byteBuffer.order(ByteOrder.LITTLE_ENDIAN); // 设置小端
                 mByteReadBufferMap.put(device, byteBuffer);
             }
             return byteBuffer;

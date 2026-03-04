@@ -4,6 +4,7 @@ import android.bluetooth.BluetoothDevice;
 import android.util.Log;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 
 public abstract class BlePduUtil {
@@ -90,6 +91,7 @@ public abstract class BlePduUtil {
     public static BlePdu buildPdu(byte[] bytes) {
         BlePdu units = new BlePdu();
         ByteBuffer buffer = ByteBuffer.allocate(bytes.length);
+        buffer.order(ByteOrder.LITTLE_ENDIAN); // 设置小端
         buffer.put(bytes);
         buffer.flip();
 
