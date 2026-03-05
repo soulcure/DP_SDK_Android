@@ -5,6 +5,7 @@ import android.util.Log;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Arrays;
 
 
 public abstract class BlePduUtil {
@@ -52,7 +53,9 @@ public abstract class BlePduUtil {
                 byte[] packByte = new byte[totalLength];
                 buffer.get(packByte);
                 BlePdu blePdu = buildPdu(packByte);
-                OnRec(blePdu, device);
+                if (blePdu != null) {
+                    OnRec(blePdu, device);
+                }
                 buffer.compact();
                 //read to read.
                 buffer.flip();
@@ -65,7 +68,9 @@ public abstract class BlePduUtil {
                 byte[] packByte = new byte[totalLength];
                 buffer.get(packByte);
                 BlePdu blePdu = buildPdu(packByte);
-                OnRec(blePdu, device);
+                if (blePdu != null) {
+                    OnRec(blePdu, device);
+                }
                 buffer.compact();
                 //read to write.
                 buffer.clear();
@@ -102,6 +107,18 @@ public abstract class BlePduUtil {
         units.body = new byte[length];
         buffer.get(units.body);
         units.crc = buffer.get();
+
+        // CRC校验
+        // CRC 校验范围，和序列化方法一致，取bytes下标1到结尾（含crc字节前）
+
+        byte[] crcList = Arrays.copyOfRange(bytes, 1, bytes.length);
+        byte calcCrc = BlePdu.crc8(crcList);
+        if (units.crc != calcCrc) {
+            // 可以根据需要抛出异常、返回null或者打印警告
+            Log.e(TAG, "CRC 校验失败:包内crc=" + String.format("%02x", units.crc) + "，计算crc=" + String.format("%02x", calcCrc));
+            return null;
+        }
+
         return units;
     }
 

@@ -3,6 +3,8 @@ package com.skyworth.bleclient;
 import android.util.Log;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.Arrays;
 
 
 public abstract class BlePduUtil {
@@ -28,7 +30,7 @@ public abstract class BlePduUtil {
         if (buffer.limit() > BlePdu.PDU_BASIC_LENGTH) {
             byte begin = buffer.get(0);
             Log.v(TAG, "pdu begin is " + begin);
-            if (begin != BlePdu.pduStartFlag) {
+            if (begin != BlePdu.flag) {
                 Log.e(TAG, "pdu header error buffer limit:" + buffer.limit());
                 buffer.clear();
                 return -1;
@@ -43,14 +45,16 @@ public abstract class BlePduUtil {
         if (buffer.limit() >= BlePdu.PDU_HEADER_LENGTH) {
             //has full header
             int bodyLength = buffer.getShort(BlePdu.PDU_BODY_LENGTH_INDEX);
-            int totalLength = bodyLength + BlePdu.PDU_HEADER_LENGTH;
+            int totalLength = bodyLength + BlePdu.PDU_HEADER_LENGTH + BlePdu.PDU_CRC_LENGTH;
 
             if (totalLength < buffer.limit()) {
                 //has a full pack.
                 byte[] packByte = new byte[totalLength];
                 buffer.get(packByte);
                 BlePdu blePdu = buildPdu(packByte);
-                OnRec(blePdu);
+                if (blePdu != null) {
+                    OnRec(blePdu);
+                }
                 buffer.compact();
                 //read to read.
                 buffer.flip();
@@ -63,7 +67,9 @@ public abstract class BlePduUtil {
                 byte[] packByte = new byte[totalLength];
                 buffer.get(packByte);
                 BlePdu blePdu = buildPdu(packByte);
-                OnRec(blePdu);
+                if (blePdu != null) {
+                    OnRec(blePdu);
+                }
                 buffer.compact();
                 //read to write.
                 buffer.clear();
@@ -89,15 +95,26 @@ public abstract class BlePduUtil {
     public static BlePdu buildPdu(byte[] bytes) {
         BlePdu units = new BlePdu();
         ByteBuffer buffer = ByteBuffer.allocate(bytes.length);
+        buffer.order(ByteOrder.LITTLE_ENDIAN); // 设置小端
         buffer.put(bytes);
         buffer.flip();
 
         buffer.get();  //units.flag
-        units.pduType = buffer.get();
         short length = buffer.getShort();
         units.length = length;
+        units.cmd = buffer.get();
         units.body = new byte[length];
         buffer.get(units.body);
+        units.crc = buffer.get();
+
+        byte[] crcList = Arrays.copyOfRange(bytes, 1, bytes.length);
+        byte calcCrc = BlePdu.crc8(crcList);
+        if (units.crc != calcCrc) {
+            // 可以根据需要抛出异常、返回null或者打印警告
+            Log.e(TAG, "CRC 校验失败:包内crc=" + String.format("%02x", units.crc) + "，计算crc=" + String.format("%02x", calcCrc));
+            return null;
+        }
+
         return units;
     }
 

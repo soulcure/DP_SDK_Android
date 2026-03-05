@@ -29,7 +29,7 @@ public class BlePdu {
      * index 0. pos:[0-1)
      * the begin flag of a pdu.
      */
-    public static final byte flag = (byte) 0xAA;
+    public static final byte flag = (byte) 0xaa;
 
     /****************************************************
      *
